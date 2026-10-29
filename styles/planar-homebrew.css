@@ -1,0 +1,18 @@
+.planar-manager {padding:12px;overflow:auto;max-height:100%;line-height:1.4}
+.planar-manager header h2{margin:0 0 4px}
+.planar-manager h3{margin:15px 0 8px}
+.planar-manager nav.planar-tabs{display:flex;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--color-border-light-primary,#888);padding:7px 0}
+.planar-manager section{padding-bottom:9px;border-bottom:1px solid var(--color-border-light-primary,#777)}
+.planar-manager table{width:100%;margin:8px 0;border-collapse:collapse}
+.planar-manager th,.planar-manager td{padding:6px;text-align:left;vertical-align:top;border-bottom:1px solid var(--color-border-light-primary,#888)}
+.planar-manager button{width:auto;margin:2px;padding:5px 8px}
+.planar-manager .notes{font-style:italic;opacity:0.85}
+.planar-form .form-group{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:8px 0}
+.planar-form .form-group label{min-width:145px}
+.planar-form input,.planar-form select{flex:1;max-width:280px}
+
+.planar-resonance-result { margin-top: .6em; padding: .5em .65em; border-left: 3px solid var(--color-border-highlight); background: color-mix(in srgb, var(--color-bg-option) 80%, transparent); font-size: .88em; line-height: 1.4; }
+.planar-resonance-result strong { display: block; margin-bottom: .15em; }
+
+.planar-manager .planar-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.planar-manager .planar-lang{flex:0 0 auto;width:auto;min-width:3em;font-weight:600}

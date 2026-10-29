@@ -1,0 +1,35 @@
+{
+  "id": "planar-homebrew",
+  "title": "Planar Homebrew",
+  "description": "The homebrew rules of our Turn of Fortune's Wheel table, for dnd5e: Silver Eagle Resonance (matching weapon dice chain), Bound Companions (a familiar or vestige manifested by casting, with GM approval), Portable Light Sources (per-item light, ignitions and burn time) and Blind Death Saves (secret GM rolls, handed to Planar Glitch on a death). Campaign-specific by design.",
+  "version": "0.6.0",
+  "authors": [
+    { "name": "rkeytech" }
+  ],
+  "compatibility": {
+    "minimum": "14",
+    "verified": "14"
+  },
+  "relationships": {
+    "systems": [
+      { "id": "dnd5e", "type": "system", "compatibility": { "minimum": "6.0.0" } }
+    ],
+    "recommends": [
+      { "id": "planar-glitch", "type": "module", "reason": "A hero who dies on blind death saves is handed to Planar Glitch (body, Wheel, glitch), which can't see secret failures by itself." }
+    ]
+  },
+  "esmodules": ["scripts/main.mjs"],
+  "styles": ["styles/planar-homebrew.css"],
+  "languages": [
+    { "lang": "en", "name": "English", "path": "lang/en.json" },
+    { "lang": "el", "name": "Ελληνικά", "path": "lang/el.json" }
+  ],
+  "url": "https://github.com/zacharatos/planar-homebrew",
+  "manifest": "https://github.com/zacharatos/planar-homebrew/releases/latest/download/module.json",
+  "download": "https://github.com/zacharatos/planar-homebrew/releases/download/v0.6.0/module.zip",
+  "bugs": "https://github.com/zacharatos/planar-homebrew/issues",
+  "readme": "https://github.com/zacharatos/planar-homebrew#readme",
+  "changelog": "https://github.com/zacharatos/planar-homebrew/blob/main/CHANGELOG.md",
+  "license": "https://github.com/zacharatos/planar-homebrew/blob/main/LICENSE",
+  "flags": {}
+}
