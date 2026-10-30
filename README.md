@@ -6,9 +6,9 @@ The homebrew rules of our *Turn of Fortune's Wheel* table, as one Foundry VTT mo
 
 - **Silver Eagle Resonance**: when the weapon's two damage dice match, it rolls another and keeps going while they match; the weapon's own dice aren't doubled on a critical hit. Inside the normal dnd5e damage roll, or as a separate exploding-die damage card (the tested macro's way, and the fallback).
 - **Bound Companion**: any world actor bound to a hero as a familiar or vestige. Manifest spends one slot the player picks (or casts a spell, or is free) and places the token next to the hero; recall, free return, dismiss, command once per round, destroyed at 0 HP. The companion window shows its actions as buttons, its sheet and its light.
-- **Portable Light Source**: torches, candles, lamps and lanterns light the holder's token with their own look, counting ignitions and burn time on Foundry's world clock; hooded lantern shutter, oil refills, new torch from the stack.
-- **Token lights and scene lights**: ready-made lights for any owned token (the vestige's Spectral Aura, *Light*, *Daylight*, Moonlit Glow…), and a GM switchboard for every light of the scene (off / on / toggle, soften / restore look). From the *Player & GM Light Controller* macro.
-- **Token HUD**: right-click a token for a light button and, on a hero with a companion, a companion button.
+- **Portable Light Source**: torches, candles, lamps, lanterns and light spells light the holder's token with their own look, counting ignitions and burn time on Foundry's world clock; hooded lantern shutter, oil refills, new torch from the stack.
+- **Token lights and scene lights (GM)**: ready-made lights for any token (the vestige's Spectral Aura, *Light*, *Daylight*, Moonlit Glow…), and a switchboard for every light of the scene (off / on / toggle, soften / restore look). From the *Player & GM Light Controller* macro. Players light only what their heroes carry.
+- **Token HUD**: right-click a token: a light button (GM) and, on a hero with a companion or the companion itself, a companion button.
 - **Blind Death Saves**: the GM rolls death saves in secret (automatically at a downed hero's turn), the tally lives in a GM-only journal, only the end is announced. A death is handed to **Planar Glitch**, which can't see secret failures by itself.
 - Greek and English, per user (EN/ΕΛ button in every window); chat lines everyone reads use the world's chat language (Greek by default).
 
@@ -22,7 +22,7 @@ https://github.com/zacharatos/planar-homebrew/releases/latest/download/module.js
 
 Updates come from the same screen when a new release is tagged. Needs Foundry V14 and dnd5e 6.0.x. Works best with Planar Glitch (recommended in the manifest).
 
-**Where to find it:** three buttons in the **Token controls** of the scene toolbar: *Planar Homebrew* (GM manager), *Portable lights* (everyone) and *Bound companions* (players who own a hero with a companion, and the GM). The same windows are under **Game Settings → Configure Settings → Planar Homebrew**.
+**Where to find it:** the **Planar Homebrew** group of the scene controls (left toolbar; a submenu like Tokens): *Planar Homebrew* (GM manager), *Scene lights* (GM), *Portable lights* (everyone) and *Bound companions* (players who own a hero with a companion, and the GM). The world setting *Own toolbar group* off puts them under Tokens instead. The same windows are under **Game Settings → Configure Settings → Planar Homebrew**.
 
 > **Test in a copy of the world first.** Every rule is covered by tests against mocked Foundry documents. 0.7.0 was tried on our live V14 server (2026-10-30); 0.8.0 fixes what failed there (companion actions, lights for tokens other than carried items) and brings in the tested light and sword macros, but has not been played live yet. See [Implementation status](docs/IMPLEMENTATION_STATUS.md) and the manual checklist in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
@@ -76,13 +76,13 @@ This is **the same Planar Homebrew module**, not a second package. You can bind 
 
 Open **Bound companions** from the Token controls, or right-click the hero's (or the companion's) token → the dragon button. Each companion is a card:
 
-- **Manifest**: pick a slot (Pact Magic first); the module spends it and the companion appears on the nearest free square next to the hero, with its light, at full HP. Drag it where you want. If placing fails, the slot is given back.
-- **Recall** removes the token and keeps its HP (*dormant*); **Return** brings it back for free. By default both are outside combat only (binding option).
+- **Manifest**: with a bound spell (Manifest Vestige) it casts that spell (so does casting it from the sheet); without one, pick a slot (Pact Magic first) and the module spends it. Then **click the square** where the companion appears (within range of the hero; right-click or Esc cancels). It comes out with its light, at full HP. A cancelled or failed placement keeps the casting: **Place (already cast)** finishes it for free; a slot spent by the module is given back instead.
+- **Recall** removes the token and keeps its HP (*dormant*); **Return** brings it back for free, where the player clicks. By default both are outside combat only (binding option).
 - **Dismiss** ends it; the next Manifest needs a new slot. At **0 HP** it is destroyed automatically (GM connected). If the hero dies it vanishes (option, on by default).
 - **Command** announces the order in chat and is tracked once per round in combat. Without a command it takes the Dodge action (campaign rule; not automated).
-- While it's out: its **actions as buttons** (Vestige's Strike, other weapons, features, spells, rolled through dnd5e as usual), its **Sheet**, and a **light** menu for its token.
+- While it's out: its **actions as buttons** (Vestige's Strike, other weapons, features, spells, rolled through dnd5e as usual) and its **Sheet**. The GM also gets a **light** menu for its token.
 
-**Cost options:** *Spend one spell slot* (the module lowers the slot; no spell item needed), *Cast a spell from the sheet* (runs the chosen spell activity on the sheet; use a Utility activity, not a Summon one, or you'd get a second token; if no slot change is seen it warns), *Free*. Bindings made before 0.8.0 keep their behaviour.
+**Cost options:** choosing a **spell** in the bind dialog means the companion comes out when that spell is cast (any activity, Summon included: dnd5e's own summoning is skipped for it; the cast is refused before a slot is spent when the companion is already out). Without a spell: *Spend one spell slot* (the module lowers the slot) or *Free*. Bindings made before 0.8.0 keep their behaviour.
 
 **Who does what:** token changes run on the active GM's client. A player's request names the player, and the GM's client checks that this player owns the hero; by default it then just happens, because binding the companion was the GM's decision. Turn on the world setting **GM approves companion actions** to confirm every request by hand. No connected GM: player requests are refused. **Repair** (manager or card) fixes a manifested companion whose token was deleted, a dormant one at 0 HP, and adopts a companion token placed by hand.
 
@@ -120,6 +120,8 @@ This is a **third rule in the same module**, sharing the same GM Manager and Fou
 4. Choose a preset, then configure **Bright radius** and **Total dim radius** (feet), color, alpha, luminosity, angle, animation type/speed/intensity, fuel mode, max ignitions, total burn duration (seconds), and optionally a specific **Utility Activity**.
 5. For an oil lamp/lantern, select **Oil inventory Item** from the same Actor's inventory. Refilling consumes **one** unit from that item's `system.quantity`. There is no hidden oil creation. This is optional for magical/permanent lights, which can have no fuel tracking.
 6. Save. You can subsequently **Edit**, **Reset** (GM override of fuel/charges), **Repair** a stale link, or **Remove** the assignment. To turn off an otherwise recognized item permanently, **Edit → Enabled: Disabled**; removing its custom assignment permits the name-based default again.
+
+**Light spells.** *Light*, *Continual Flame*, *Produce Flame* and *Daylight* are recognised on a sheet (or set any spell up with *Set up a light*). Casting the spell lights the caster's token (attacks such as hurling Produce Flame don't); the light window shows the spell with **Cast** and **End**. Spell lights have no ignitions or burn time: the GM or player ends them.
 
 Newly acquired items with recognizable names are detected on the first use, even if not included in the initial bulk assignment. Nonstandard magical items require an explicit GM assignment; no arbitrary weapon or item is modified merely because its name resembles a spell.
 
@@ -162,11 +164,11 @@ The module preserves a token's previous light settings on ignition and normally 
 
 **References:** [2024 D&D equipment rules](https://www.dndbeyond.com/sources/dnd/br-2024/equipment), [D&D 5e v6 Activity hooks](https://github.com/foundryvtt/dnd5e/wiki/Hooks), [Foundry V14 LightData schema](https://foundryvtt.com/api/v14/classes/foundry.data.LightData.html).
 
-## Token lights and scene lights (new in v0.8.0)
+## Token lights and scene lights (GM, new in v0.8.0)
 
-The *Player & GM Light Controller* macro as two tabs of the light window (Token controls → *Portable lights*, or right-click a token → light bulb).
+The *Player & GM Light Controller* macro as two GM tabs of the light window (*Portable lights*, *Scene lights*, or right-click a token → light bulb). Players don't see them: they light only what their heroes carry, with the profile the GM gave each item or spell.
 
-**Token lights (everyone):** pick a token you own (hero, vestige, familiar) and a light, choose the look (Gentle, Balanced, Vivid: appearance only, the radius stays), **Apply**. Nothing is spent; for torches and lamps that burn out use *Carried items*. A burning carried item on that token is put out first.
+**Token lights:** pick any token (hero, vestige, familiar) and a light, choose the look (Gentle, Balanced, Vivid: appearance only, the radius stays), **Apply**. Nothing is spent; for torches and lamps that burn out use *Carried items*. A burning carried item on that token is put out first.
 
 | Light | Bright / total dim | Light | Bright / total dim |
 |---|---|---|---|
@@ -177,7 +179,7 @@ The *Player & GM Light Controller* macro as two tabs of the light window (Token 
 | Bullseye Lantern (60° cone) | 60 / 120 ft | Spectral Aura · Beacon | 0 / 15 · 10 / 30 ft |
 | Moonlit Glow | 5 / 20 ft | No light | — |
 
-**Scene lights (GM):** every ambient light and token light of the scene, with its state. **Turn off** (the original is kept), **Turn on / restore**, **Toggle each**, **Soften the look** (weaker colour and luminosity, same ranges) and **Restore the original look**, for the lights selected on the map, the ticked ones, or all (asks first). Magical darkness and Global Illumination are never changed, and "all" never reveals an ambient light you hid by hand. Lights switched off or softened by the old macro come back too. A player can't relight a token you switched off until you restore it.
+**Scene lights (GM):** every ambient light and token light of the scene, with its state. **Turn off** (the original is kept), **Turn on / restore**, **Toggle each**, **Soften the look** (weaker colour and luminosity, same ranges) and **Restore the original look**, for the lights selected on the map, the ticked ones, or all (asks first). Magical darkness and Global Illumination are never changed, and "all" never reveals an ambient light you hid by hand. Lights switched off or softened by the old macro come back too. 
 
 ## Blind Death Saves — GM-only 2024 D&D death-save tracking (new in v0.6.0)
 

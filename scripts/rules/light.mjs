@@ -1,9 +1,9 @@
 import {ID,RULES} from '../core/constants.mjs';
 import {t,fail} from '../i18n.mjs';
-import {LIGHT_PRESETS,classifyLightItem,validateLightConfig,createLightState,burnElapsed,canIgnite,decrementIgnition,renderTokenLight} from '../core/light-presets.mjs';
+import {LIGHT_PRESETS,classifyLightItem,classifyLightSource,validateLightConfig,createLightState,burnElapsed,canIgnite,decrementIgnition,renderTokenLight} from '../core/light-presets.mjs';
 
 export const lightRule=Object.freeze({id:RULES.LIGHT,name:'Rule.Light.Name',target:'Rule.Light.Target',description:'Rule.Light.Hint'});
-export {LIGHT_PRESETS,classifyLightItem,validateLightConfig};
+export {LIGHT_PRESETS,classifyLightItem,classifyLightSource,validateLightConfig};
 const inflight=new Set();
 const report=(message)=>ui.notifications?.warn?.(message);
 const currentTime=()=>Number(game.time?.worldTime??0);
@@ -24,8 +24,8 @@ const matchingLight=(a,b)=>{
 /** GM-assigned or self-provisioned compatible item. Never interpret arbitrary item names as rules. */
 export async function getLightAssignment(item,{discover=false}={}){
   const existing=stored(item);if(existing)return existing;
-  if(!discover||!item?.parent||!['equipment','consumable','loot','tool','weapon'].includes(item.type))return null;
-  const preset=classifyLightItem(item.name);
+  if(!discover||!item?.parent||!['equipment','consumable','loot','tool','weapon','spell'].includes(item.type))return null;
+  const preset=classifyLightSource(item);
   if(!preset)return null;
   const config=validateLightConfig({preset});
   return {config,state:createLightState(config)};
@@ -151,6 +151,10 @@ export async function setHood(item,closed){
     return t(closed?'Light.HoodLowered':'Light.HoodRaised',{item:item.name});
   });
 }
+/** An oil flask in the same inventory: name contains "oil" (or "λάδι"), at least one left, not the lamp itself. */
+export function findOil(item){
+  return [...(item?.parent?.items??[])].find(i=>i.id!==item.id&&/\boil\b|λάδι/i.test(i.name??'')&&!/lamp|lantern|λάμπα|φανάρι/i.test(i.name??'')&&Number(i.system?.quantity??0)>=1)??null;
+}
 /** Explicit refuel: consumes exactly one referenced Oil item from this Actor; torch replacements consume one additional unit from an inventory stack. */
 export async function refuelPortableLight(item){
   ensureItem(item);
@@ -160,7 +164,12 @@ export async function refuelPortableLight(item){
     if(state.litTokenUuid)throw fail('Err.ExtinguishFirst');
     if(config.fuelMode==='none')throw fail('Err.NoFuel');
     if(config.fuelMode==='oil'){
-      const oil=await fromUuidSafe(config.fuelItemUuid);
+      let oil=await fromUuidSafe(config.fuelItemUuid);
+      // No oil item set up (or it ran out): use any "Oil" / "Oil Flask" this actor carries, and remember it.
+      if(!oil||oil.parent?.uuid!==item.parent.uuid||Number(oil.system?.quantity??0)<1){
+        const found=findOil(item);
+        if(found){oil=found;config.fuelItemUuid=found.uuid;}
+      }
       if(!oil||oil.parent?.uuid!==item.parent.uuid||Number(oil.system?.quantity??0)<1)throw fail('Err.NoOil');
       if(oil.id===item.id)throw fail('Err.SelfFuel');
       await oil.update({'system.quantity':Number(oil.system.quantity)-1});
@@ -204,9 +213,10 @@ export function registerPortableLightAutomation(record=()=>{}){
   Hooks.on('dnd5e.postUseActivity',(activity,_usageConfig,_results)=>{
     const item=activity?.item;
     if(!item?.parent?.items||!owned(item.parent))return;
-    // An Attack Activity (e.g. using a torch as a weapon) must not ignite the torch.
-    if(activity.type!=='utility')return;
-    const explicit=stored(item),preset=classifyLightItem(item.name);
+    // An Attack Activity (using a torch as a weapon, hurling Produce Flame) must not ignite the light.
+    // Items light from a Utility activity; spells from any activity that isn't an attack.
+    if(item.type==='spell'?activity.type==='attack':activity.type!=='utility')return;
+    const explicit=stored(item),preset=classifyLightSource(item);
     if(!explicit&&!preset)return;
     if(explicit?.config.activityId&&explicit.config.activityId!==activity.id)return;
     if(explicit?.config.enabled===false)return;

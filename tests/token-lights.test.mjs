@@ -63,16 +63,16 @@ function setup(user={isGM:true}){
   globalThis.ui={notifications:{warn(){},info(){},error(){}}};
   globalThis.fromUuid=async()=>null;
 }
-test('applyTokenLight: owner can light their token (the vestige too); a GM blackout blocks players',async()=>{
+test('applyTokenLight: only the GM puts presets on tokens (the vestige too)',async()=>{
   setup({isGM:false});
   const {applyTokenLight,tokenPreset}=await import('../scripts/rules/token-lights.mjs');
   const vestige=doc({id:'Vestige',light:{bright:0,dim:0}});
+  await assert.rejects(applyTokenLight(vestige,'aura'),/Only the GM/);
+  assert.equal(vestige.light.dim,0);
+  setup({isGM:true});
   assert.match(await applyTokenLight(vestige,'aura'),/Vestige/);
   assert.equal(vestige.light.dim,15);
   assert.equal(tokenPreset(vestige),'aura');
-  await assert.rejects(applyTokenLight(doc({id:'NPC',owner:false}),'torch'),/can't change/);
-  const dark=doc({id:'Hero',flags:{'planar-homebrew':{lightSwitch:{kind:'token',light:{}}}}});
-  await assert.rejects(applyTokenLight(dark,'torch'),/switched off/);
 });
 test('switchLights: off saves, on restores, toggle, soften and restore look; old macro flags still restore',async()=>{
   setup();

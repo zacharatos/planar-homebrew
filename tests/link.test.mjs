@@ -54,20 +54,29 @@ test("exposes the api on game.modules and the old global on ready", () => {
   for (const fn of ["open", "openManager", "openStatus", "openLights", "performCompanionAction", "calculateResonance", "togglePortableLight", "rollBlindDeathSave", "addPrivateDeathFailure", "applyTokenLight", "switchLights"]) assert.equal(typeof api[fn], "function", fn);
   assert.equal(game.planarHomebrew, api);
   assert.equal(api.registry.list().length, 4);
-  for (const hook of ["dnd5e.rollDamage", "dnd5e.preRollDeathSave", "preUpdateActor", "updateCombat", "dnd5e.postUseActivity", "updateWorldTime", "deleteToken", "dnd5e.preRollDamage", "renderTokenHUD", "controlToken", "updateAmbientLight"]) assert.ok(hooks.on[hook]?.length, hook);
+  for (const hook of ["dnd5e.rollDamage", "dnd5e.preRollDeathSave", "preUpdateActor", "updateCombat", "dnd5e.postUseActivity", "updateWorldTime", "deleteToken", "dnd5e.preRollDamage", "dnd5e.preUseActivity", "dnd5e.preSummon", "renderTokenHUD", "controlToken", "updateAmbientLight"]) assert.ok(hooks.on[hook]?.length, hook);
 });
 
-test("token controls: manager for the GM only, lights for everyone", () => {
+test("scene controls: our own group; manager and scene lights for the GM only, lights for everyone", () => {
   const [fn] = hooks.on.getSceneControlButtons;
-  const controls = { tokens: { tools: {} } };
+  const controls = { tokens: { order: 1, tools: {} }, lighting: { order: 4, tools: {} } };
   fn(controls);
-  assert.equal(controls.tokens.tools["planar-homebrew-manager"].visible, true);
-  assert.equal(controls.tokens.tools["planar-homebrew-lights"].visible, true);
+  const group = controls["planar-homebrew"];
+  assert.ok(group, "group added");
+  assert.equal(group.activeTool, "select");
+  assert.equal(group.tools.select.button, undefined, "the default tool is a plain select, not a button");
+  assert.equal(group.order, 5);
+  assert.equal(group.tools["planar-homebrew-manager"].visible, true);
+  assert.equal(group.tools["planar-homebrew-scene-lights"].visible, true);
+  assert.deepEqual(Object.keys(controls.tokens.tools), [], "nothing added under Tokens");
   game.user.isGM = false;
   const player = { tokens: { tools: {} } };
   fn(player);
-  assert.equal(player.tokens.tools["planar-homebrew-manager"].visible, false);
-  assert.equal(player.tokens.tools["planar-homebrew-companions"].visible, false, "no companion → no button");
+  const tools = player["planar-homebrew"].tools;
+  assert.equal(tools["planar-homebrew-manager"].visible, false);
+  assert.equal(tools["planar-homebrew-scene-lights"].visible, false);
+  assert.equal(tools["planar-homebrew-lights"].visible, true);
+  assert.equal(tools["planar-homebrew-companions"].visible, false, "no companion → no button");
   game.user.isGM = true;
   assert.doesNotThrow(() => fn({}));
 });

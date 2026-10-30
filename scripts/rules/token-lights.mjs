@@ -34,12 +34,12 @@ export function lightableTokens(scene=canvas?.scene,user=game.user){
 /** The preset this module last put on a token ('' when unknown or changed by hand). */
 export const tokenPreset=doc=>safeFlag(doc,ID,'tokenLight')??'';
 
-/** Put a light preset on a token (player: own tokens; GM: any). The token's portable item light goes out first. */
+/** GM: put a light preset on a token. The token's portable item light goes out first. */
 export async function applyTokenLight(doc,key,{strength='gentle'}={}){
   if(!doc)throw fail('Err.SelectToken');
   if(!isTokenLightPreset(key))throw fail('Err.LightPreset');
-  if(!game.user.isGM&&!doc.isOwner)throw fail('Err.TokenPermission');
-  if(switchBackup(doc))throw fail('Err.LightBlackout');
+  // Only the GM puts presets on tokens; players light what their heroes carry (items, light spells).
+  if(!game.user.isGM)throw fail('Err.GMOnly');
   // A lit torch or lantern owns the token's light: put it out (restoring the earlier light) before replacing it.
   const active=safeFlag(doc,ID,'activePortableLight');
   if(active?.itemUuid){
@@ -63,7 +63,7 @@ export function sceneLightSources(scene=canvas?.scene){
   for(const doc of scene.tokens){
     if(doc.light?.negative)continue;
     if(!emitsLight(doc.light)&&!switchBackup(doc)&&!lookBackup(doc))continue;
-    sources.set(`T:${doc.id}`,{id:`T:${doc.id}`,kind:'token',doc,label:t('TokenLight.Token',{name:doc.name})});
+    sources.set(`T:${doc.id}`,{id:`T:${doc.id}`,kind:'token',doc,label:t('TokenLight.TokenSource',{name:doc.name})});
   }
   return sources;
 }

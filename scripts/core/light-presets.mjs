@@ -12,8 +12,23 @@ export const LIGHT_PRESETS = Object.freeze({
   produce: {label:'Produce Flame',bright:10,dim:20,color:'#FF9922',alpha:.18,luminosity:.25,animation:'torch',speed:2,intensity:1,angle:360,maxIgnitions:0,burnSeconds:0,fuelMode:'none'},
   daylight: {label:'Daylight Spell',bright:60,dim:120,color:'#FFFFEE',alpha:.12,luminosity:.4,animation:'none',speed:1,intensity:1,angle:360,maxIgnitions:0,burnSeconds:0,fuelMode:'none'},
   beacon: {label:'Spectral Beacon',bright:10,dim:30,color:'#8F8BBE',alpha:.16,luminosity:.24,animation:'ghost',speed:1,intensity:1,angle:360,maxIgnitions:0,burnSeconds:0,fuelMode:'none'},
-  spectral: {label:'Spectral Aura',bright:0,dim:15,color:'#7773AC',alpha:.14,luminosity:.19,animation:'ghost',speed:1,intensity:1,angle:360,maxIgnitions:0,burnSeconds:0,fuelMode:'none'}
+  spectral: {label:'Spectral Aura',bright:0,dim:15,color:'#7773AC',alpha:.14,luminosity:.19,animation:'ghost',speed:1,intensity:1,angle:360,maxIgnitions:0,burnSeconds:0,fuelMode:'none'},
+  moon: {label:'Moonlit Glow',bright:5,dim:20,color:'#8299B3',alpha:.12,luminosity:.20,animation:'none',speed:1,intensity:1,angle:360,maxIgnitions:0,burnSeconds:0,fuelMode:'none'}
 });
+/** Spells recognised by name (2024 PHB): casting them lights the caster's token. */
+export function classifySpellLight(name='') {
+  const value=String(name).toLowerCase().replace(/[,_-]/g,' ').replace(/\s+/g,' ').trim();
+  if (/^continual flame\b/.test(value)) return 'continual';
+  if (/^produce flame\b/.test(value)) return 'produce';
+  if (/^daylight\b/.test(value)) return 'daylight';
+  if (/^light\b/.test(value)) return 'light';
+  return null;
+}
+/** The profile an item or spell would get by its name (null: needs the GM to set it up). */
+export function classifyLightSource(item) {
+  if (!item) return null;
+  return item.type==='spell' ? classifySpellLight(item.name) : classifyLightItem(item.name);
+}
 /** Auto-detect only known item names. Other lights must be assigned explicitly. */
 export function classifyLightItem(name='') {
   const value=String(name).toLowerCase().replace(/[,_-]/g,' ').replace(/\s+/g,' ').trim();

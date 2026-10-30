@@ -63,7 +63,6 @@ export function resolveCastingActivity(summoner, config) {
   if(!item || item.type!=='spell')throw fail('Err.ChooseSpell');
   const activity=item.system?.activities?.get?.(config.castingActivityId);
   if(!activity || typeof activity.use!=='function')throw fail('Err.ActivityUnusable');
-  if(activity.type==='summon')throw fail('Err.NoSummonActivity');
   return activity;
 }
 /** Checks before anything is paid or placed. Without a point, the nearest free square next to the hero is used. */
@@ -173,7 +172,7 @@ async function placeToken(summoner,sceneId,point,expectedState){
   }
   const created=await scene.createEmbeddedDocuments('Token',[data]);
   if(created?.length!==1)throw fail('Err.TokenNotCreated');
-  try{await summoner.setFlag(ID,'vestige',{...config,state:'manifested'});}
+  try{await summoner.setFlag(ID,'vestige',{...config,state:'manifested',paidPending:false});}
   catch(e){expectedDeletes.add(created[0].uuid);await scene.deleteEmbeddedDocuments('Token',[created[0].id]);throw e;}
   const kind=expectedState==='dormant'?'Return':'Manifest';
   try{await companionChat(summoner,companion,kind,expectedState==='dormant'?'Chat.CompanionReturns':'Chat.CompanionAppears',{companion:companion.name,scene:scene.name});}
@@ -331,12 +330,35 @@ export function registerCompanionQueries(record){
   CONFIG.queries[GM_QUERY]=async(data)=>{try{return await handleGMRequest(data);}catch(error){record?.(`Companion query error: ${cleanError(error)}`);return {ok:false,error:cleanError(error)};}};
 }
 
+// ---- Choosing the spot ----
+
+let placementPicker=null;
 /**
- * The one entry point for windows, the Token HUD and macros: performCompanionAction(hero, action).
- * Actions: manifest, return, recall, dismiss, command (owner or GM); destroy (GM).
- * Options: point {x,y} (else the nearest free square by the hero), slotKey ('pact', 'spell1'…; else asked).
+ * The UI registers a picker (ui/place.mjs): picker({summoner, expected, validate}) resolves a point the
+ * player clicked on the map, null if they cancelled, or undefined when there's no canvas (then the nearest
+ * free square is used). Without a picker (tests, macros) the nearest free square is used.
  */
-export async function performCompanionAction(summoner,action,{point,slotKey}={}){
+export function setPlacementPicker(fn){placementPicker=typeof fn==='function'?fn:null;}
+
+/** The hero whose bound spell this activity is (spell cost), if the binding is active. */
+export function castingSummoner(activity){
+  const item=activity?.item,actor=item?.parent;
+  if(!item||item.type!=='spell'||!worldActor(actor))return null;
+  const config=flags(actor);
+  if(!config.companionUuid||!config.enabled||config.costMode!=='spell')return null;
+  if(config.castingItemUuid!==item.uuid)return null;
+  if(config.castingActivityId&&config.castingActivityId!==activity.id)return null;
+  return actor;
+}
+
+/**
+ * The one entry point for windows, the Token HUD, the spell hook and macros: performCompanionAction(hero, action).
+ * Actions: manifest, return, recall, dismiss, command (owner or GM); destroy (GM).
+ * Options: point {x,y} (else the player clicks on the map, or the nearest free square), slotKey ('pact',
+ * 'spell1'…; else asked), prepaid (the bound spell was just cast).
+ * With a bound spell, Manifest casts that spell; casting it (here or from the sheet) places the companion.
+ */
+export async function performCompanionAction(summoner,action,{point,slotKey,prepaid=false}={}){
   if(!isAuthorizedOwner(summoner,game.user))throw fail('Err.SummonerOwner');
   if(!ALLOWED_ACTIONS.includes(action))throw fail('Err.CompanionAction');
   const config=flags(summoner);
@@ -348,20 +370,64 @@ export async function performCompanionAction(summoner,action,{point,slotKey}={})
     const scene=currentScene();
     const expected=action==='return'?'dormant':config.state;
     if(action==='manifest'&&!['dismissed','destroyed'].includes(config.state))throw fail('Err.CannotManifest');
-    // Check placement before anything is paid.
-    const checked=preflight(summoner,scene.id,point,expected);
-    const paid=action==='manifest'?await payForManifest(summoner,config,{slotKey}):{};
+    const alreadyPaid=action!=='manifest'||prepaid||Boolean(config.paidPending)||config.costMode==='free';
+    // A bound spell: cast it through dnd5e (slot, chat card). The postUseActivity hook comes back here with prepaid.
+    if(action==='manifest'&&config.costMode==='spell'&&!alreadyPaid){
+      preflight(summoner,scene.id,undefined,expected);
+      const activity=resolveCastingActivity(summoner,config);
+      await activity.use();
+      return '';
+    }
+    // Where: the given point, a spot the player clicks, or the nearest free square. Checked before paying.
+    let target=point;
+    if(target===undefined&&placementPicker){
+      target=await placementPicker({summoner,expected,validate:spot=>preflight(summoner,scene.id,spot,expected).point});
+      if(target===null)return action==='manifest'&&(prepaid||config.paidPending)?t('Companion.SlotKept'):'';
+    }
+    const checked=preflight(summoner,scene.id,target,expected);
+    const paid=alreadyPaid?{}:await payForManifest(summoner,config,{slotKey});
     if(!paid)return '';
     try{
       if(game.user.isGM)return await doAction(summoner,action,{point:checked.point,sceneId:scene.id});
       return await askGM({action,summonerUuid:summoner.uuid,sceneId:scene.id,point:checked.point});
     }catch(error){
       if(await refundSlot(summoner,paid))throw new Error(cleanError(error)+' '+t('Companion.SlotRefunded'));
+      if(action==='manifest'&&(prepaid||config.paidPending))throw new Error(cleanError(error)+' '+t('Companion.SlotKept'));
       throw error;
     }
   }
   if(game.user.isGM)return doAction(summoner,action);
   return askGM({action,summonerUuid:summoner.uuid});
+}
+
+/**
+ * Casting the bound spell (Manifest Vestige) from the sheet, a hotbar or the companion window:
+ * - before: refused (no slot spent) if the companion is already out, or the hero has no token here;
+ * - dnd5e's own Summon is skipped for that activity (no second token);
+ * - after: the cast is remembered (paidPending, so a cancelled placement can be finished with Manifest
+ *   without paying again), then the player picks the spot and the companion appears.
+ */
+export function registerCompanionCasting(record=()=>{}){
+  Hooks.on('dnd5e.preUseActivity',activity=>{
+    const summoner=castingSummoner(activity);
+    if(!summoner)return;
+    const config=flags(summoner);
+    try{
+      if(['manifested','dormant'].includes(config.state))throw fail('Err.CompanionAlreadyOut',{companion:companionOf(config)?.name??'?'});
+      if(config.paidPending)throw fail('Err.CastAlreadyPaid');
+      preflight(summoner,currentScene().id,undefined,config.state);
+    }catch(error){ui.notifications?.warn?.(cleanError(error));return false;}
+  });
+  Hooks.on('dnd5e.preSummon',activity=>castingSummoner(activity)?false:undefined);
+  Hooks.on('dnd5e.postUseActivity',async activity=>{
+    const summoner=castingSummoner(activity);
+    if(!summoner||!summoner.isOwner&&!game.user.isGM)return;
+    try{
+      await summoner.setFlag(ID,'vestige',{...flags(summoner),paidPending:true});
+      const message=await performCompanionAction(summoner,'manifest',{prepaid:true});
+      if(message)ui.notifications?.info?.(message);
+    }catch(error){record(`Manifest after casting: ${cleanError(error)}`);ui.notifications?.error?.(cleanError(error));}
+  });
 }
 /**
  * GM-only repair: a dormant companion at 0 HP becomes destroyed; a manifested one without a token becomes

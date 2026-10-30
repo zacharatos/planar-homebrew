@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.9.0] — 2026-10-30
+
+From the 0.8.0 test at the table.
+
+- **Players light only what they carry.** Token light presets (the *Token lights* tab, the companion card's light menu, the Token HUD light bulb) are GM-only now; players see just their carried items and light spells in the light window. The GM decides what light each item or spell gives (*Manager → Lights → Edit*: any profile, e.g. Lothrik's torch as a Spectral Aura). New item profile *Moonlit glow*.
+- **Light spells:** *Light*, *Continual Flame*, *Produce Flame* and *Daylight* on a sheet are recognised like torches (or the GM sets any spell up). Casting the spell lights the caster's token (hurling Produce Flame doesn't); in the light window the spell has **Cast** (through dnd5e: slot, chat card) and **End**.
+- **Fixed: the manager's light buttons did nothing** (Set up a light, Profile every recognised light, Edit, Reset, Repair, Remove). They carried a different data attribute than the one the manager listened for, so no click reached the code and no error showed.
+- **Refill oil** finds the actor's *Oil* by itself when none was set up (and remembers it).
+- **Companion: the player chooses the spot.** Manifest and Return ask the player to click a square near the hero (right-click or Esc cancels; an out-of-range or taken square says why and waits for another click). The module's windows step aside while picking.
+- **Companion: casting the bound spell manifests it.** With a spell bound (Manifest Vestige), casting it from the sheet, a hotbar or the companion window's Manifest button brings the companion out, then the player picks the spot. The cast is refused before any slot is spent when the companion is already out or the hero has no token on the scene. dnd5e's own Summon is skipped for that activity, so a Summon activity can be bound now. If the placement is cancelled or fails, the casting is kept: **Place (already cast)** in the companion window finishes it without a new slot. Without a bound spell, Manifest spends one slot as in 0.8.0. In the bind dialog the spell is chosen up front; choosing one means "manifest by casting it".
+- **Toolbar:** the module's buttons moved out of the Tokens column into their own **Planar Homebrew** group of the scene controls (a submenu like Tokens): Manager and Scene lights (GM), Portable lights, Bound companions. Opening the group keeps token selection working. World setting *Own toolbar group* (on) puts them back under Tokens when off.
+- Action buttons sit side by side instead of one per line. The scene switchboard names token lights ("Token: Marigia") instead of "Token".
+- Stored data: binding field `paidPending` (a casting not yet placed). No migration needed.
+
 ## [0.8.0] — 2026-10-30
 
 Fixes from the first live test on our Foundry 14 server, and Timos's tested macros brought into the module.

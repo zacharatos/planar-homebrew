@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {performCompanionAction,inspectVestige,registerCompanionQueries,bindVestige,repairCompanionState,heroForToken} from '../scripts/rules/vestige.mjs';
+import {performCompanionAction,inspectVestige,registerCompanionQueries,registerCompanionCasting,setPlacementPicker,bindVestige,repairCompanionState,heroForToken} from '../scripts/rules/vestige.mjs';
 
 /** Simulated Foundry documents. Not a running Foundry V14 world. */
 function createWorld({slots=2,pact=1,costMode='spell',approval=false}={}){
@@ -8,7 +8,7 @@ function createWorld({slots=2,pact=1,costMode='spell',approval=false}={}){
   globalThis.Hooks={
     on(name,callback){const callbacks=hookMap.get(name)??new Set();callbacks.add(callback);hookMap.set(name,callbacks);},
     off(name,callback){hookMap.get(name)?.delete(callback);},
-    async call(name,...args){for(const f of hookMap.get(name)??[])await f(...args);}
+    async call(name,...args){let ok=true;for(const f of hookMap.get(name)??[])if(await f(...args)===false)ok=false;return ok;}
   };
   let oldState={companionUuid:'Actor.COMPANION',state:'dismissed',enabled:true,range:60,costMode,requireCasting:costMode==='spell',
     castingItemUuid:'Actor.SUMMONER.Item.SPELL',castingActivityId:'CAST',lightPreset:'aura',commandCost:'bonus',allowPlayerControls:true,requireOutsideCombatRecall:true};
@@ -20,20 +20,25 @@ function createWorld({slots=2,pact=1,costMode='spell',approval=false}={}){
       if(data.ownership)this.ownership=data.ownership;
     },
     async getTokenDocument(data){return {toObject:()=>({...data,light:{bright:0,dim:0}})};}};
-  const activity={id:'CAST',type:'utility',async use(){
+  // A dnd5e activity: preUseActivity can cancel before the slot is spent; postUseActivity runs after.
+  const activity={id:'CAST',type:'summon',async use(){
+    if(await Hooks.call('dnd5e.preUseActivity',this)===false){events.push('cast-blocked');return null;}
     events.push('native-cast');
     const slot=summoner.system.spells.spell1;
     if(!slot.value)return null;
-    slot.value-=1;return {};
+    slot.value-=1;
+    await Hooks.call('dnd5e.postUseActivity',this);
+    return {};
   }};
   const spell={uuid:'Actor.SUMMONER.Item.SPELL',id:'SPELL',type:'spell',system:{activities:new Map([['CAST',activity]])}};
   activity.item=spell;
   const summoner={id:'SUMMONER',uuid:'Actor.SUMMONER',parent:null,name:'Summoner',
-    items:[spell],system:{spells:{spell1:{value:slots,max:2},pact:{value:pact,max:1,level:2}}},
+    items:[spell],isOwner:true,system:{spells:{spell1:{value:slots,max:2},pact:{value:pact,max:1,level:2}}},
     getFlag(_scope,key){return key==='vestige'?oldState:null;},
     async setFlag(_scope,key,value){if(key==='vestige'){oldState=value;events.push('save-state');}},
     async update(data){for(const [k,v] of Object.entries(data)){const [, , key]=k.split('.');this.system.spells[key].value=v;}events.push('slot');},
     testUserPermission(user){return user.id==='GM'||user.id==='PLAYER';}};
+  spell.parent=summoner;
   const tokens=[{id:'MAIN',uuid:'Scene.SCENE.Token.MAIN',actorId:'SUMMONER',x:100,y:100,width:1,height:1,getFlag:()=>undefined}];
   let count=0;
   const scene={id:'SCENE',name:'Test Field',grid:{size:100,distance:5,units:'ft'},
@@ -61,16 +66,19 @@ function createWorld({slots=2,pact=1,costMode='spell',approval=false}={}){
   globalThis.foundry={utils:{escapeHTML:(x)=>x},applications:{api:{DialogV2:{confirm:(...a)=>dialogs.confirm(...a),input:(...a)=>dialogs.input(...a)}}}};
   gm.query=async(type,payload)=>{const previous=game.user;game.user=gm;try{return await CONFIG.queries[type](payload);}finally{game.user=previous;}};
   registerCompanionQueries();
+  registerCompanionCasting();
+  setPlacementPicker(null);
   const world={summoner,companion,scene,events,gm,player,dialogs,failCreate:false,
     slots:()=>summoner.system.spells.spell1.value,pact:()=>summoner.system.spells.pact.value,config:()=>oldState,
     asPlayer(){game.user=player;}};
   return world;
 }
 const companionToken=w=>w.scene.tokens.find(t=>t.actorId==='COMPANION');
+const spellOf=w=>w.summoner.items[0];
 
 test('spell mode: cast once, token beside the hero with the spectral aura; recall/return free; dismiss then re-cast',async()=>{
   const world=createWorld();
-  assert.match(await performCompanionAction(world.summoner,'manifest'),/manifested/i);
+  await performCompanionAction(world.summoner,'manifest');   // casts the bound spell; the hook places it
   assert.equal(world.slots(),1);
   assert.equal(world.config().state,'manifested');
   const token=companionToken(world);
@@ -128,9 +136,9 @@ test('duplicate manifestation does not consume additional slots',async()=>{
 });
 
 test('invalid coordinates do not spend a slot',async()=>{
-  const world=createWorld();
+  const world=createWorld({costMode:'slot'});
   await assert.rejects(performCompanionAction(world.summoner,'manifest',{point:{x:1100,y:1100}}),/within/);
-  assert.equal(world.slots(),2);
+  assert.equal(world.pact(),1);
 });
 
 test('player: manifest, recall, return and dismiss run on the GM client without approval by default',async()=>{
@@ -172,7 +180,8 @@ test('Manifest Vestige (hpMode vestige): full AU hit points for the warlock leve
   world.summoner.classes={warlock:{system:{levels:4}}};
   world.config().hpMode='vestige';
   world.companion.system.attributes.hp.value=0;
-  assert.match(await performCompanionAction(world.summoner,'manifest'),/manifested/i);
+  await performCompanionAction(world.summoner,'manifest');
+  assert.equal(world.config().state,'manifested');
   assert.equal(world.companion.system.attributes.hp.max,20,'4 + 4 × 4');
   assert.equal(world.companion.system.attributes.hp.value,20);
 });
@@ -213,5 +222,39 @@ test('repair adopts a hand-placed token when the binding thinks the companion is
   const world=createWorld();
   await world.scene.createEmbeddedDocuments('Token',[{x:300,y:100}]);
   assert.match(await repairCompanionState(world.summoner),/adopt|bound one/i);
+  assert.equal(world.config().state,'manifested');
+});
+
+test('casting the bound spell (sheet or Manifest button) places the companion where the player clicks',async()=>{
+  const world=createWorld();
+  const {castingSummoner}=await import('../scripts/rules/vestige.mjs');
+  spellOf(world).parent=world.summoner;
+  assert.equal(castingSummoner(spellOf(world).system.activities.get('CAST')),world.summoner);
+  let asked=0;
+  setPlacementPicker(async({validate})=>{asked++;return validate({x:300,y:300});});
+  await spellOf(world).system.activities.get('CAST').use();   // from the sheet
+  assert.equal(asked,1);
+  assert.equal(world.config().state,'manifested');
+  assert.equal(world.config().paidPending,false);
+  const token=companionToken(world);assert.deepEqual([token.x,token.y],[300,300]);
+  assert.equal(world.slots(),1);
+  // Casting again while it's out is refused before any slot is spent.
+  await spellOf(world).system.activities.get('CAST').use();
+  assert.ok(world.events.includes('cast-blocked'));
+  assert.equal(world.slots(),1);
+  setPlacementPicker(null);
+});
+test('a cancelled placement keeps the casting: Manifest then places it without a new slot',async()=>{
+  const world=createWorld();
+  spellOf(world).parent=world.summoner;
+  setPlacementPicker(async()=>null);
+  await performCompanionAction(world.summoner,'manifest');   // casts, the player cancels the click
+  assert.equal(world.slots(),1);
+  assert.equal(world.config().paidPending,true);
+  assert.equal(companionToken(world),undefined);
+  await assert.rejects(Promise.resolve().then(async()=>{const r=await spellOf(world).system.activities.get('CAST').use();if(!r)throw new Error('blocked');}),/blocked/,'no second casting while one is pending');
+  setPlacementPicker(null);
+  await performCompanionAction(world.summoner,'manifest');
+  assert.equal(world.slots(),1,'no new slot');
   assert.equal(world.config().state,'manifested');
 });

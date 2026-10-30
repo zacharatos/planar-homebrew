@@ -69,3 +69,24 @@ test('magical presets from original controller preserve distinct radii',()=>{
     assert.equal(canIgnite(config,createLightState(config)),true);
   }
 });
+
+test('light spells are recognised by name; items keep their own names',async()=>{
+  const {classifySpellLight,classifyLightSource}=await import('../scripts/core/light-presets.mjs');
+  assert.equal(classifySpellLight('Light'),'light');
+  assert.equal(classifySpellLight('Continual Flame'),'continual');
+  assert.equal(classifySpellLight('Produce Flame'),'produce');
+  assert.equal(classifySpellLight('Daylight'),'daylight');
+  assert.equal(classifySpellLight('Lightning Bolt'),null);
+  assert.equal(classifyLightSource({type:'spell',name:'Torch'}),null,'a spell is never read as an item');
+  assert.equal(classifyLightSource({type:'equipment',name:'Torch'}),'torch');
+  assert.equal(LIGHT_PRESETS.moon.dim,20);
+});
+test('refilling finds the actor\'s oil by itself',async()=>{
+  const {findOil}=await import('../scripts/rules/light.mjs');
+  const lamp={id:'L',name:'Lamp'};
+  const items=[lamp,{id:'O',name:'Oil',system:{quantity:9}},{id:'E',name:'Oil (empty)',system:{quantity:0}},{id:'X',name:'Oil Lamp',system:{quantity:2}}];
+  lamp.parent={items};
+  assert.equal(findOil(lamp).id,'O');
+  items[1].system.quantity=0;
+  assert.equal(findOil(lamp),null);
+});

@@ -70,8 +70,8 @@ async function configureBinding(summoner,refresh){
   const prev=companionConfig(summoner);
   const currentId=actors.find(a=>a.uuid===prev.companionUuid)?.id;
   const spells=summoner.items.filter(i=>i.type==='spell');
+  // Any activity of a spell, Summon too: the module skips dnd5e's own summoning for the bound one.
   const activities=spells.flatMap(item=>[...(item.system?.activities?.values?.()??[])]
-    .filter(activity=>activity.type!=='summon')
     .map(activity=>({key:`${item.id}:${activity.id}`,label:`${item.name} — ${activity.name||activity.type}`,item,activity})));
   const previousCast=spells.find(i=>i.uuid===prev.castingItemUuid);
   const castingKey=previousCast?`${previousCast.id}:${prev.castingActivityId}`:'';
@@ -79,11 +79,11 @@ async function configureBinding(summoner,refresh){
     <p>${t('Companion.BindHint')}</p>
     ${field(t('Companion.CompanionActor'),`<select name="companion">${actors.map(a=>option(a.id,a.name,a.id===currentId)).join('')}</select>`)}
     ${field(t('Companion.Cost'),`<select name="costMode">${['slot','spell','free'].map(k=>option(k,t(`Companion.CostMode.${k}`),prev.costMode===k)).join('')}</select>`)}
+    ${field(t('Companion.Spell'),`<select name="casting">${option('',t('Companion.SpellNone'),!castingKey)}${activities.map(a=>option(a.key,a.label,a.key===castingKey)).join('')}</select>`)}
     ${field(t('Companion.HPMode'),`<select name="hpMode">${['vestige','keep'].map(k=>option(k,t(`Companion.HP.${k}`),prev.hpMode===k)).join('')}</select>`)}
     ${field(t('Companion.Light'),`<select name="lightPreset">${option('none',t('Companion.NoLight'),prev.lightPreset==='none')}${tokenPresetOptions(prev.lightPreset)}</select>`)}
     ${field(t('Companion.Share'),yesNo('grantOwnership',prev.grantOwnership,'Common.Yes','Common.No'))}
     <details class="planar-more"><summary>${t('Companion.More')}</summary>
-    ${field(t('Companion.Spell'),`<select name="casting">${option('',t('Companion.SpellNone'),!castingKey)}${activities.map(a=>option(a.key,a.label,a.key===castingKey)).join('')}</select>`)}
     ${field(t('Common.Status'),yesNo('enabled',prev.enabled))}
     ${field(t('Label.Range'),`<input name="range" type="number" min="5" max="500" value="${safe(prev.range)}">`)}
     ${field(t('Companion.CommandCost'),`<select name="commandCost">${['bonus','action','free'].map(k=>option(k,t(`Cost.${k}`),prev.commandCost===k)).join('')}</select>`)}
@@ -94,7 +94,9 @@ async function configureBinding(summoner,refresh){
   `);
   if(!fd)return;
   const casting=activities.find(a=>a.key===get(fd,'casting'));
-  const costMode=String(get(fd,'costMode'));
+  // A spell chosen means "manifest by casting it"; otherwise the chosen cost (a slot, or free).
+  const chosenCost=String(get(fd,'costMode'));
+  const costMode=casting&&chosenCost!=='free'?'spell':chosenCost;
   if(costMode==='spell'&&!casting)throw fail('Err.ChooseSpell');
   const companion=game.actors.get(String(get(fd,'companion')));
   await bindVestige(summoner,companion,{
@@ -189,6 +191,13 @@ export class PlanarHomebrewManager extends foundry.applications.api.ApplicationV
   _onRender(_context,options){
     super._onRender(_context,options);
     bindLanguageButton(this.element);
+    // The light section's buttons (Edit, Reset, Repair, Remove, Set up, Profile all) carry data-light-action.
+    this.element.querySelectorAll('#planar-lights [data-light-action]').forEach(el=>el.addEventListener('click',async()=>{
+      el.disabled=true;
+      try{await handleLightManagerAction(el.dataset.lightAction,el.dataset.lightUuid,()=>this.render());}
+      catch(e){notify(e);}
+      finally{el.disabled=false;}
+    }));
     this.element.querySelectorAll('button[data-planar-action]').forEach(buttonEl=>buttonEl.addEventListener('click',async()=>{
       try{
         const action=buttonEl.dataset.planarAction;
@@ -262,12 +271,12 @@ export class PlanarCompanionStatus extends foundry.applications.api.ApplicationV
       const {config,companion,tokens,errors}=await inspectVestige(actor),state=config.state;
       const can=game.user.isGM||(config.enabled&&config.allowPlayerControls);
       const actions=!can?`<em>${safe(t('Companion.GMControls'))}</em>`:[
-        ['dismissed','destroyed'].includes(state)?button('manifest','Companion.Action.manifest',actor.uuid):'',
+        ['dismissed','destroyed'].includes(state)?button('manifest',config.paidPending?'Companion.PlaceNow':'Companion.Action.manifest',actor.uuid):'',
         state==='dormant'?button('return','Companion.Action.returnFree',actor.uuid)+button('dismiss','Companion.Action.dismiss',actor.uuid):'',
         state==='manifested'?button('command','Companion.Action.command',actor.uuid)+button('recall','Companion.Action.recall',actor.uuid)+button('dismiss','Companion.Action.dismiss',actor.uuid):''
       ].join('');
       const token=tokens[0]?.token;
-      const lightRow=token&&(game.user.isGM||token.isOwner)?`<div class="planar-inline">${safe(t('Companion.Light'))}: <select data-companion-light="${safe(token.uuid)}">${tokenPresetOptions(tokenPreset(token)||'')}</select> <button type="button" data-companion-light-apply="${safe(token.uuid)}">${safe(t('TokenLight.Apply'))}</button></div>`:'';
+      const lightRow=token&&game.user.isGM?`<div class="planar-inline">${safe(t('Companion.Light'))}: <select data-companion-light="${safe(token.uuid)}">${tokenPresetOptions(tokenPreset(token)||'')}</select> <button type="button" data-companion-light-apply="${safe(token.uuid)}">${safe(t('TokenLight.Apply'))}</button></div>`:'';
       const canSee=companion?.testUserPermission?.(game.user,'OBSERVER');
       const abilities=state==='manifested'&&companion?.isOwner?[...companion.items].filter(i=>['weapon','feat','spell'].includes(i.type)&&(i.system?.activities?.size??0)>0)
         .map(i=>`<button type="button" class="planar-ability" data-companion-use="${safe(i.uuid)}" title="${safe(i.name)}"><img src="${safe(i.img)}" alt=""> ${safe(i.name)}</button>`).join(''):'';

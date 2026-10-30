@@ -67,7 +67,7 @@
       "ApproveAction": "<strong>{user}</strong> asks: <strong>{action}</strong> for <strong>{summoner}</strong> and <strong>{companion}</strong>. Allow?",
       "ApproveActionTitle": "Approve a companion action",
       "Bind": "Bind a companion",
-      "BindHint": "Pick the companion's actor (it must exist in the Actors directory). Defaults fit Marigia's vestige: one slot to manifest, Vestige Companion HP, a spectral aura. If the companion is already on the map, its token is adopted.",
+      "BindHint": "Pick the companion's actor (it must exist in the Actors directory) and how it is paid. With a bound spell (Manifest Vestige), casting that spell from the sheet, or Manifest in the companion window, brings it out: the player clicks where it appears. Without a spell, Manifest spends one slot. A companion already on the map is adopted.",
       "BindTitle": "Bind a companion: {name}",
       "Bound": "{companion} is bound to {summoner}",
       "ChooseSummoner": "Which hero?",
@@ -128,14 +128,17 @@
       "SlotRefunded": "The slot was given back.",
       "CostMode": {
         "slot": "Spend one spell slot (Pact first; the player picks)",
-        "spell": "Cast a spell from the sheet (advanced)",
+        "spell": "Cast the bound spell (from the sheet or the Manifest button)",
         "free": "Free (no slot)"
       },
       "NoLight": "No light",
       "Share": "Hero's players own the companion",
       "More": "More options",
       "Sheet": "Sheet",
-      "Abilities": "Actions:"
+      "Abilities": "Actions:",
+      "PickSpot": "Click a square near your hero for {companion}. Right-click or Esc to cancel.",
+      "SlotKept": "The casting is kept: press Manifest in the companion window to place it without paying again.",
+      "PlaceNow": "Place (already cast)"
     },
     "Cost": {
       "action": "Action",
@@ -327,7 +330,9 @@
       "LightBlackout": "The GM has switched off this token's light; ask the GM to turn it back on first",
       "NoLightsPicked": "No light sources picked",
       "CompanionTokenExists": "{companion} already has a token on {scene}. Recall or dismiss it, or ask the GM for Repair (it adopts a token placed by hand).",
-      "NoSlotLeft": "{name} has no spell slot left"
+      "NoSlotLeft": "{name} has no spell slot left",
+      "CompanionAlreadyOut": "{companion} is already here (or recalled): use Return, or Dismiss it first",
+      "CastAlreadyPaid": "The last casting was not placed yet: press Manifest in the companion window (no new slot)"
     },
     "Label": {
       "DieFaces": "Die faces",
@@ -406,7 +411,9 @@
       "StaleCleared": "Stale light state cleared",
       "Status": "{state} · {ignitions} lights · {minutes} min",
       "Title": "Portable lights",
-      "Unlit": "Out"
+      "Unlit": "Out",
+      "Cast": "Cast",
+      "EndSpell": "End"
     },
     "Manager": {
       "Intro": "Our table's homebrew rules. Each rule is set on a particular weapon, actor or item; common lights are also recognised by name.",
@@ -446,7 +453,8 @@
       "magic": "Magic light (permanent)",
       "produce": "Produce Flame",
       "spectral": "Spectral aura",
-      "torch": "Torch"
+      "torch": "Torch",
+      "moon": "Moonlit glow"
     },
     "Resonance": {
       "Activity": "Attack activity",
@@ -538,6 +546,10 @@
       "companionApproval": {
         "Name": "GM approves companion actions",
         "Hint": "When on, every player Manifest / Return / Recall / Dismiss asks the GM first. Off: the binding is the permission and it just happens."
+      },
+      "toolbarGroup": {
+        "Name": "Own toolbar group",
+        "Hint": "Put the module's buttons in their own \"Planar Homebrew\" group of the scene controls (a submenu like Tokens). Off: under Tokens, as before."
       }
     },
     "State": {
@@ -551,7 +563,10 @@
       "Companions": "Bound companions",
       "Lights": "Portable lights",
       "Manager": "Planar Homebrew",
-      "TokenLight": "Token light"
+      "TokenLight": "Token light",
+      "Group": "Planar Homebrew",
+      "Select": "Select tokens",
+      "SceneLights": "Scene lights (GM)"
     },
     "TokenLight": {
       "Tab": {
@@ -598,7 +613,7 @@
         "manual": "Ticked below",
         "all": "Every light in this scene"
       },
-      "Intro": "Give any token you own a light: your hero, a vestige or a familiar. Pick the token (or right-click it on the map → light bulb), choose the light, Apply.",
+      "Intro": "Give any token a light (the vestige's aura, a magical glow…). Pick the token (or right-click it on the map → light bulb), choose the light, Apply. Players can't do this: they light what their heroes carry.",
       "Notes": "Radii are bright / total dim, in feet. This doesn't spend items, fuel or spell slots: for torches and lamps that burn out, use the Carried items tab. A lit carried item is put out first.",
       "Token": "Token",
       "Source": "Light",
@@ -627,7 +642,8 @@
       "SceneNotes": "Turn on / restore only brings back lights this tool switched off (also those switched off by the old macro). A hidden ambient light comes on only when picked by hand, never with \"every light\".",
       "ConfirmAll": "{action}: up to {count} lights on {scene}?",
       "Failed": "Failed: {names}",
-      "Result": "Lights: {changed} changed, {skipped} skipped, {failed} failed"
+      "Result": "Lights: {changed} changed, {skipped} skipped, {failed} failed",
+      "TokenSource": "Token: {name}"
     }
   }
 }

@@ -1,5 +1,5 @@
 import {ID} from '../core/constants.mjs';
-import {LIGHT_PRESETS,classifyLightItem} from '../core/light-presets.mjs';
+import {LIGHT_PRESETS,classifyLightSource} from '../core/light-presets.mjs';
 import {t,fail,language,toggleLanguage} from '../i18n.mjs';
 import {TOKEN_LIGHT_GROUPS,LIGHT_STRENGTHS,pickTargets} from '../core/token-lights.mjs';
 import {lightableTokens,applyTokenLight,tokenPreset,sceneLightSources,sourceLit,selectedSourceIds,switchBackup,lookBackup,switchLights} from '../rules/token-lights.mjs';
@@ -12,7 +12,7 @@ const field=(label,control)=>`<div class="form-group"><label>${safe(label)}</lab
 const DialogV2=()=>foundry.applications.api.DialogV2;
 const notify=e=>{console.error(`${ID} lights:`,e);ui.notifications.error(t('Note.Error',{message:e?.message??e}));};
 const worldActors=()=>game.actors.contents.toSorted((a,b)=>a.name.localeCompare(b.name));
-const lightItems=actor=>actor.items.filter(i=>Boolean(i.getFlag(ID,'portableLight'))||Boolean(classifyLightItem(i.name)));
+const lightItems=actor=>actor.items.filter(i=>Boolean(i.getFlag(ID,'portableLight'))||Boolean(classifyLightSource(i)));
 const presetLabel=key=>LIGHT_PRESETS[key]?t(`Preset.${key}`):'?';
 const ANIMATIONS=['none','torch','flame','pulse','ghost','chroma','emanation','energy','fairy','fog','hexa','lightning','radialrainbow','revolving','siren','smokepatch','starlight','sunburst','swirlingrainbow','vortex','wave'];
 async function prompt(title,content){return DialogV2().input({window:{title},content:`<div class="planar-form">${content}</div>`,rejectClose:false,ok:{label:t('Common.Save')}});}
@@ -30,7 +30,7 @@ export async function configurePortableLight(item){
   if(!game.user.isGM)throw fail('Err.GMOnly');
   const existing=summarizeLight(item);
   if(existing?.state.litTokenUuid)throw fail('Err.ExtinguishFirst');
-  const detected=classifyLightItem(item.name)??'magic';
+  const detected=classifyLightSource(item)??'magic';
   const presetChoice=await prompt(t('Light.PresetTitle',{item:item.name}),`<p>${t('Light.PresetHint')}</p>${field(t('Light.Preset'),`<select name="preset">${Object.keys(LIGHT_PRESETS).map(key=>option(key,presetLabel(key),key===(existing?.config.preset??detected))).join('')}</select>`)}`);
   if(!presetChoice)return;
   const preset=String(get(presetChoice,'preset'));
@@ -66,7 +66,7 @@ export async function assignDetectedLights(){
   if(!await confirm(t('Light.ConfirmBulk')))return 0;
   let count=0;
   for(const actor of worldActors())for(const item of actor.items){
-    const preset=classifyLightItem(item.name);
+    const preset=classifyLightSource(item);
     if(!preset||item.getFlag(ID,'portableLight'))continue;
     try{await assignPortableLight(item,{preset});count++;}
     catch(error){console.warn(`${ID}: Cannot auto-assign ${item.uuid}`,error);}
@@ -84,7 +84,7 @@ const button=(action,key,uuid)=>`<button type="button" data-light-action="${safe
 export function lightManagementHTML(){
   const rows=[];
   for(const actor of worldActors())for(const item of lightItems(actor)){
-    const entry=summarizeLight(item),preset=entry?.config.preset??classifyLightItem(item.name);
+    const entry=summarizeLight(item),preset=entry?.config.preset??classifyLightSource(item);
     rows.push(`<tr><td>${safe(actor.name)}</td><td>${safe(item.name)}</td><td>${safe(presetLabel(preset))}</td><td>${safe(status(item,entry))}</td><td>${button('light-configure','Common.Edit',item.uuid)} ${entry?button('light-reset','Common.Reset',item.uuid)+button('light-repair','Common.Repair',item.uuid)+button('light-remove','Common.Remove',item.uuid):''}</td></tr>`);
   }
   return `<section id="planar-lights"><h3>${t('Light.Title')}</h3><p>${t('Light.ManagerIntro')}</p>
@@ -119,18 +119,20 @@ export class PlanarLightController extends foundry.applications.api.ApplicationV
   get title(){return t('Light.ControllerTitle');}
   /** Open on a tab and/or with a token picked (Token HUD button). */
   configure({tab,tokenId}={}){
-    if(TABS.includes(tab)&&(tab!=='scene'||game.user.isGM))this.tab=tab;
+    if(TABS.includes(tab)&&(tab==='items'||game.user.isGM))this.tab=tab;
     if(tokenId)this.choice.tokenId=tokenId;
     return this;
   }
   async _renderHTML(){
     const root=document.createElement('div');root.className='planar-manager planar-lights';
-    if(this.tab==='scene'&&!game.user.isGM)this.tab='items';
-    const tabs=TABS.filter(k=>k!=='scene'||game.user.isGM).map(k=>`<button type="button" class="planar-tab ${this.tab===k?'active':''}" data-planar-tab="${k}">${safe(t(`TokenLight.Tab.${k}`))}</button>`).join('');
+    // Players only light and put out what their heroes carry (items and light spells); presets on tokens
+    // and the scene switchboard are the GM's.
+    if(!game.user.isGM)this.tab='items';
+    const tabs=TABS.filter(k=>k==='items'||game.user.isGM).map(k=>`<button type="button" class="planar-tab ${this.tab===k?'active':''}" data-planar-tab="${k}">${safe(t(`TokenLight.Tab.${k}`))}</button>`).join('');
     const body=this.tab==='token'?this._tokenTab():this.tab==='scene'?this._sceneTab():await this._itemsTab();
     const langButton=`<button type="button" class="planar-lang" data-planar-lang title="${safe(t('Common.LanguageHint'))}">${language()==='el'?'EN':'ΕΛ'}</button>`;
     root.innerHTML=`<header class="planar-head"><div><h2>${t('Light.ControllerTitle')}</h2></div>${langButton}</header>
-      <nav class="planar-tabbar">${tabs}</nav>${body}`;
+      ${game.user.isGM?`<nav class="planar-tabbar">${tabs}</nav>`:''}${body}`;
     return root;
   }
   async _itemsTab(){
@@ -141,8 +143,9 @@ export class PlanarLightController extends foundry.applications.api.ApplicationV
         const entry=summarizeLight(item)??await getLightAssignment(item,{discover:true});
         if(!entry||!entry.config.enabled)continue;
         const lit=Boolean(entry.state.litTokenUuid);
-        rows.push(`<tr><td>${safe(actor.name)}</td><td>${safe(item.name)}</td><td>${safe(presetLabel(entry.config.preset))}</td><td>${safe(status(item,entry))}</td><td class="planar-actions">
-          ${button('light-toggle',lit?'Light.Extinguish':'Light.Ignite',item.uuid)}
+        const spell=item.type==='spell';
+        rows.push(`<tr><td>${safe(actor.name)}</td><td>${spell?'✦ ':''}${safe(item.name)}</td><td>${safe(presetLabel(entry.config.preset))}</td><td>${safe(spell?t(lit?'Light.Lit':'Light.Unlit'):status(item,entry))}</td><td class="planar-actions">
+          ${spell&&!lit?button('light-cast','Light.Cast',item.uuid):button('light-toggle',lit?(spell?'Light.EndSpell':'Light.Extinguish'):'Light.Ignite',item.uuid)}
           ${!lit&&entry.config.fuelMode!=='none'&&item.getFlag(ID,'portableLight')?button('light-refuel',entry.config.fuelMode==='oil'?'Light.Refill':'Light.Replace',item.uuid):''}
           ${entry.config.preset==='hooded'&&lit?button('light-hood',entry.config.hoodClosed?'Light.RaiseHood':'Light.LowerHood',item.uuid):''}
         </td></tr>`);
@@ -222,6 +225,8 @@ export class PlanarLightController extends foundry.applications.api.ApplicationV
     root.querySelectorAll('[data-light-action]').forEach(el=>el.addEventListener('click',()=>this._run(el,async()=>{
       const item=await fromUuid(el.dataset.lightUuid);
       if(!item)throw fail('Err.ItemGone');
+      // A spell is cast through dnd5e (slot, chat card); the activity hook then lights the caster's token.
+      if(el.dataset.lightAction==='light-cast'){await item.use();return '';}
       if(el.dataset.lightAction==='light-toggle')return togglePortableLight(item);
       if(el.dataset.lightAction==='light-refuel')return refuelPortableLight(item);
       if(el.dataset.lightAction==='light-hood')return setHood(item,!summarizeLight(item)?.config.hoodClosed);

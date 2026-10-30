@@ -24,7 +24,8 @@ scripts/rules/                Foundry-side rule code
   light.mjs                   ignite / put out / hood / refuel, world-time burn, Utility activity hook
   death-saves.mjs             GM-only ledger journal, secret rolls, sheet-counter guard, hand-off to Planar Glitch
 scripts/ui/                   ApplicationV2 windows (EN/ΕΛ button in each)
-  manager.mjs                 GM manager (bind dialog); companion window (cards, actions, light, sheet)
+  manager.mjs                 GM manager (bind dialog, light buttons); companion window (cards, actions, sheet; light for the GM)
+  place.mjs                   click-a-square picker for Manifest / Return
   light-ui.mjs                light section of the manager; light window: Carried items · Token lights · Scene lights (GM)
 styles/planar-homebrew.css
 lang/en.json lang/el.json     identical keys (tests check); chat lines use the world's "textLanguage"
@@ -32,7 +33,7 @@ tests/                        node:test; setup.mjs installs the dictionaries bef
 tools/                        check-syntax, stamp-manifest, package, release-api (copied from planar-theater)
 ```
 
-**Data.** Item flag `planar-homebrew.resonance` (weapon); actor flags `planar-homebrew.vestige` (summoner binding and state) and `planar-homebrew.companionCommand`; token flags `planar-homebrew.summonerUuid`, `planar-homebrew.activePortableLight`, `planar-homebrew.tokenLight` (last preset), `planar-homebrew.lightSwitch` (switched off: saved light / hidden), `planar-homebrew.lightLook` (look before softening; ambient lights carry the last two as well); item flag `planar-homebrew.portableLight` (`{config, state}`); the death save ledger is the flag `deathLedger` (`{records, configs}`) on a GM-only JournalEntry marked `deathLedgerStore`. World settings: `deathSavesEnabled`, `deathSavesAuto`, `deathSavesNPCs`, `companionApproval`, `textLanguage`, `debug`; client setting `language`. 0.8.0 added binding fields `costMode` / `grantOwnership` and resonance `mode`; old records read them from their defaults or old fields (`companionCostMode`), so no migration.
+**Data.** Item flag `planar-homebrew.resonance` (weapon); actor flags `planar-homebrew.vestige` (summoner binding and state) and `planar-homebrew.companionCommand`; token flags `planar-homebrew.summonerUuid`, `planar-homebrew.activePortableLight`, `planar-homebrew.tokenLight` (last preset), `planar-homebrew.lightSwitch` (switched off: saved light / hidden), `planar-homebrew.lightLook` (look before softening; ambient lights carry the last two as well); item flag `planar-homebrew.portableLight` (`{config, state}`); the death save ledger is the flag `deathLedger` (`{records, configs}`) on a GM-only JournalEntry marked `deathLedgerStore`. World settings: `deathSavesEnabled`, `deathSavesAuto`, `deathSavesNPCs`, `companionApproval`, `textLanguage`, `debug`; client setting `language`. 0.8.0 added binding fields `costMode` / `grantOwnership` and resonance `mode`, 0.9.0 `paidPending`; old records read them from their defaults or old fields (`companionCostMode`), so no migration.
 
 **Other modules.** Planar Glitch through `game.modules.get("planar-glitch").api.recordDeath(actor, {cause, source: "saves"})` only (dev guide § 3: APIs, never its settings or flags).
 
@@ -45,7 +46,7 @@ When you add a feature: pure logic in `scripts/core/` with a test, Foundry code 
 ## Manual test checklist (copy of the world, one GM + one player browser)
 
 **Install and language**
-- [ ] Install from the manifest URL, enable, reload: no console errors; three buttons in Token controls (player sees *Portable lights*, and *Bound companions* only with a companion).
+- [ ] Install from the manifest URL, enable, reload: no console errors; a *Planar Homebrew* group in the scene controls (GM: Manager, Scene lights, Portable lights, Bound companions; player: Portable lights, and Bound companions only with a companion). Opening the group: tokens can still be selected and moved. Setting *Own toolbar group* off + reload: buttons under Tokens.
 - [ ] EN/ΕΛ button switches the window language for that user only; the world setting *Chat language* sets the chat lines.
 
 **Silver Eagle Resonance** (Lothrik's Silver Eagle Greatsword)
@@ -58,9 +59,11 @@ When you add a feature: pure logic in `scripts/core/` with a test, Foundry code 
 
 **Bound Companion** (Marigia's vestige)
 - [ ] Bind Marigia → her vestige with the defaults (one slot, Vestige Companion HP, Spectral Aura): one dialog; the player gets OWNER of the vestige actor. Bind while the vestige already stands on the map: adopted as manifested.
-- [ ] Player browser: companion window (dragon button, or right-click Marigia's token) → Manifest → pick the Pact slot → the vestige appears next to Marigia with the violet aura; the Pact slot went down by one; no GM dialog.
+- [ ] Bound spell: Marigia casts *Manifest Vestige* from her sheet → no Unseen Servant token from dnd5e; she clicks a square (an out-of-range one is refused with a message) → the vestige appears there with the aura; one Pact slot spent; no GM dialog. Casting again while it's out: refused, no slot spent.
+- [ ] Same through the companion window's Manifest. Cancel the click (Esc): the button reads *Place (already cast)*; pressing it places it with no new slot.
+- [ ] No bound spell: Manifest → click a square → pick the slot → the module lowers it.
 - [ ] Manifest again while manifested: blocked, no second slot. No slot left: clear message, nothing placed.
-- [ ] Player: the vestige's action buttons (Vestige's Strike…) roll from the companion window; *Sheet* opens its sheet; the light menu changes its token light.
+- [ ] Player: the vestige's action buttons (Vestige's Strike…) roll from the companion window; *Sheet* opens its sheet; no light menu (GM only).
 - [ ] Hurt it, Recall, change scene, Return: same HP, no slot. Recall/Return in combat: blocked unless the binding allows it. Command twice in a round: second blocked.
 - [ ] 0 HP: marked destroyed, token removed; next Manifest spends one slot and restores full HP.
 - [ ] *Hit points: Vestige Companion*: at Warlock 4 the vestige comes out with 20/20 HP; drop it to 0, Manifest again: back at 20/20, one slot spent.
@@ -73,10 +76,11 @@ When you add a feature: pure logic in `scripts/core/` with a test, Foundry code 
 - [ ] Utility activity of a torch lights it; attacking with it doesn't.
 - [ ] Advance world time past 1 hour: the torch goes out on the GM's client. Oil lamp refill uses one oil item. Torch stack replacement lowers the quantity.
 - [ ] Hooded lantern: lower / raise hood. Metric scene: radii converted.
-- [ ] *Token lights* tab as a player: pick the vestige's token, Spectral Aura → violet ghost light; Torch on the hero; Vivid looks stronger, same radius; *Turn off*. Right-click a token → light bulb opens the tab with that token picked.
+- [ ] Player: the light window shows only *Carried items* (no tabs); no light bulb in the Token HUD. A *Light* cantrip on the sheet shows **Cast**: casting it lights the caster; **End** puts it out.
+- [ ] Manager → Lights: Set up a light, Profile every recognised light, Edit (give Lothrik's torch the Spectral Aura profile; lighting it shows violet), Reset, Repair, Remove all work. Refill oil on a lamp with no oil set up uses the actor's *Oil*.
+- [ ] GM *Token lights* tab: pick the vestige's token, Spectral Aura → violet ghost light; Torch on the hero; Vivid looks stronger, same radius; *Turn off*. Right-click a token → light bulb opens the tab with that token picked.
 - [ ] A lit carried torch, then a Token light preset on the same token: the torch is put out first (its ignitions untouched).
 - [ ] *Scene lights* tab (GM): turn off the selected lights; restore; toggle; soften and restore look; "all" asks first and doesn't reveal hand-hidden ambient lights. A light switched off by the old macro comes back with *Turn on / restore*.
-- [ ] A player can't relight a token the GM switched off (message), until the GM restores it.
 
 **Blind Death Saves**
 - [ ] Drop a hero to 0 HP in combat: on their turn a blind roll is whispered to the GM only; the player's sheet shows no successes/failures; the sheet's death save button does nothing (GM gets a hint).

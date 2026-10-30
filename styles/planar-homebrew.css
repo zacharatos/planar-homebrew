@@ -41,3 +41,9 @@
 .planar-manager .planar-ability img{width:20px;height:20px;border:none}
 .planar-form details.planar-more{margin-top:8px}
 .planar-form details.planar-more summary{cursor:pointer;opacity:.85}
+
+/* 0.9.0: action buttons side by side (Foundry 14 buttons are flex items at full width otherwise) */
+.planar-manager .planar-actions{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.planar-manager td.planar-actions{display:table-cell}
+.planar-manager td.planar-actions>button{display:inline-flex}
+.planar-manager .planar-actions>button{flex:0 0 auto;width:auto}
