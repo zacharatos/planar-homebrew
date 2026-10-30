@@ -150,3 +150,28 @@ test('Nonmatching critical removes doubled weapon dice even if resonance does no
  assert.equal(out.status,'applied');assert.equal(out.critical,true);assert.equal(out.matched,false);
  assert.equal(out.extra.length,0);assert.equal(roll.total,10);
 });
+
+test('separate mode (the tested macro): no crit doubling for this attack; matching dice roll an exploding chain card',async()=>{
+  const {registerResonanceAutomation,baseDiceFromRolls}=await import('../scripts/rules/resonance.mjs');
+  const hooks={};
+  globalThis.Hooks={on:(n,f)=>{(hooks[n]??=[]).push(f);}};
+  const built=[];
+  globalThis.CONFIG={Dice:{DamageRoll:{build:async(cfg)=>{built.push(cfg.rolls[0].parts[0]);return [{total:9}];}}}};
+  globalThis.ChatMessage={getSpeaker:()=>({})};
+  globalThis.ui={notifications:{warn(){},info(){},error(){}}};
+  globalThis.game={user:{isGM:true},release:{generation:14},system:{version:'6.0.5'}};
+  const item={name:'Silver Eagle Greatsword',parent:{},system:{properties:new Set(['mgc'])},getFlag:()=>({enabled:true,faces:6,maxExtra:100,damageType:'slashing',mode:'separate'})};
+  const activity={type:'attack',id:'ATK',item};
+  registerResonanceAutomation(()=>{});
+  const config={subject:activity,isCritical:true,rolls:[{options:{isCritical:true}}]};
+  for(const f of hooks['dnd5e.preRollDamage'])f(config);
+  assert.equal(config.isCritical,false);assert.equal(config.rolls[0].options.isCritical,false);
+  const die=v=>({faces:6,number:2,results:v.map(result=>({result,active:true}))});
+  for(const f of hooks['dnd5e.rollDamage'])f([{options:{type:'slashing'},dice:[die([4,4])]}],{subject:activity});
+  await new Promise(r=>setTimeout(r,0));
+  assert.deepEqual(built,['1d6x=4']);
+  for(const f of hooks['dnd5e.rollDamage'])f([{dice:[die([4,2])]}],{subject:activity});
+  await new Promise(r=>setTimeout(r,0));
+  assert.equal(built.length,1,'no chain without doubles');
+  assert.equal(baseDiceFromRolls([{options:{type:'radiant'},dice:[die([3,3])]},{options:{type:'slashing'},dice:[die([5,1])]}],6,'slashing').join(),'5,1','smite dice are not the weapon dice');
+});

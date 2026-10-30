@@ -37,3 +37,19 @@ test('AU vestige hit points and class level lookup',async()=>{
   assert.equal(classLevel({items:[{type:'class',name:'Warlock',system:{levels:2}}]},'warlock'),2);
   assert.equal(classLevel({items:[]},'warlock'),0);
 });
+
+test('old bindings keep working: chosen spell → spell, "no slot" → free, otherwise the module spends a slot',async()=>{
+  const {companionCostMode}=await import('../scripts/core/validation.mjs');
+  assert.equal(companionCostMode({requireCasting:true,castingItemUuid:'Actor.A.Item.B',castingActivityId:'C'}),'spell');
+  assert.equal(companionCostMode({requireCasting:false}),'free');
+  assert.equal(companionCostMode({requireCasting:true}),'slot');
+  assert.equal(companionCostMode({costMode:'free',requireCasting:true}),'free');
+  assert.equal(validateVestige({lightPreset:'beacon'}).lightPreset,'beacon');
+  assert.equal(validateVestige({lightPreset:'moon'}).lightPreset,'moon','any token light preset');
+  assert.throws(()=>validateVestige({lightPreset:'disco'}));
+});
+test('slots to pay with: Pact first, only those with uses left',async()=>{
+  const {availableSlots}=await import('../scripts/core/companion-helpers.mjs');
+  assert.deepEqual(availableSlots({system:{spells:{pact:{value:1,max:2,level:3},spell1:{value:0,max:4},spell2:{value:2,max:3}}}}).map(s=>[s.key,s.level,s.value]),[['pact',3,1],['spell2',2,2]]);
+  assert.deepEqual(availableSlots({system:{spells:{pact:{value:0,max:1}}}}),[]);
+});

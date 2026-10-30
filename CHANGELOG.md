@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.8.0] — 2026-10-30
+
+Fixes from the first live test on our Foundry 14 server, and Timos's tested macros brought into the module.
+
+- **Lights for any token (new tab *Token lights*):** the *Player & GM Light Controller* macro (v3) as part of the light window. Any token a user owns (a hero, Marigia's vestige, a familiar) gets a ready-made light: Candle, Torch, Oil Lamp, Hooded Lantern open / shut, Bullseye Lantern (60° cone), *Light*, *Continual Flame*, *Produce Flame*, *Daylight*, Spectral Aura, Spectral Beacon, Moonlit Glow, or no light; with a Gentle / Balanced / Vivid look (the radii never change). It spends nothing. A burning carried item on that token is put out first. The menus are grouped (lamps and torches · spells · spectral · none).
+- **Scene lights (new GM tab):** the macro's switchboard for every ambient light and token light of the scene: turn off (keeps the original), turn on / restore, toggle each, soften the look, restore the original look; for the lights selected on the map, the ticked ones, or all (with a confirmation). Magical darkness and Global Illumination are never touched; "all" never reveals an ambient light that was hidden by hand. Lights switched off or softened by the old macro (its `world` flags) are restored too.
+- **Token HUD:** right-click a token → a light-bulb button opens the light window on that token; on a hero with a bound companion (or the companion itself) a dragon button opens the companion window.
+- **Bound Companion reworked (Marigia couldn't manifest, recall or dismiss):**
+  - Manifest no longer asks for X/Y coordinates: the token appears on the nearest free square next to the hero, and the player drags it.
+  - New **cost** setting: *Spend one spell slot* (default for new bindings; the player picks the slot, Pact Magic first, and the module spends it; if the token can't be placed the slot is given back), *Cast a spell from the sheet* (the old way; no longer refuses when it can't see exactly one slot change, it warns), or *Free*. Bindings from 0.7.0 keep what they had (a chosen spell → *Cast a spell*; "no slot" → *Free*).
+  - Player requests (Manifest, Return, Recall, Dismiss) run on the GM's client **without a GM dialog**: the binding is the permission. The GM checks that the requesting user owns the hero. New world setting **GM approves companion actions** (off) brings the confirmation back.
+  - **Binding is simpler:** one short dialog (companion, cost, hit points, light, "the hero's players own the companion"), the rest under *More options*. Companions are listed NPCs first. A companion already standing on the map is **adopted** instead of refused, and the hero's players get OWNER of the companion actor (so they can move it and use its actions).
+  - The companion's light can be any token light preset (Spectral Aura by default), placed with the full light settings (colour, animation) and converted for metric scenes.
+  - A new casting always brings the companion back at full HP (also in "own HP" mode), so a 0 HP companion no longer blocks Manifest.
+  - **Companion window** is now a card per companion: portrait, HP, state, scene, the actions, a light menu for its token, its **sheet**, and its **actions as buttons** (Vestige's Strike and its other weapons, features and spells) while it is manifested. Warnings no longer hide the buttons.
+  - Repair also adopts a companion token placed by hand.
+- **Silver Eagle Resonance:** new per-weapon setting *How the chain is rolled*: inside the weapon's damage roll (as before) or as a **separate damage card**, the tested *Silver Eagle Great Sword* macro's way (crit doubling off for this attack, `1d6x=N` exploding chain as its own native damage card). When the inline way can't run (unusual roll, untested version, error), the separate card is rolled instead of nothing. Fixed: a failure inside the hook threw a second error instead of warning.
+- API: `openLights({tab, tokenId})`, `applyTokenLight(tokenDoc, preset, {strength})`, `switchLights(sources, action, {scope})`, `sceneLightSources(scene)`, `lightPresets()`; `performCompanionAction(actor, action, {point, slotKey})`.
+- Stored data: bindings gain `costMode` and `grantOwnership` (read from the old fields when missing; no migration needed). Resonance assignments gain `mode` (default `inline`). New token flags `lightSwitch`, `lightLook`, `tokenLight`.
+
 ## [0.7.0] — 2026-10-29
 
 - **Planar Glitch:** a hero who dies on Blind Death Saves is handed to Planar Glitch through its API (`recordDeath`, source *saves*) before the *Dead* status is set. Glitch's own "third failed save" detection can't see secret failures. The status used is Foundry's DEFEATED status (dnd5e: `dead`). `planar-glitch` is listed under `recommends`.

@@ -1,3 +1,4 @@
+import {isTokenLightPreset} from './token-lights.mjs';
 import {t,fail} from '../i18n.mjs';
 export const finiteRange = (value, min, max, label) => {
   const n = Number(value);
@@ -16,20 +17,24 @@ export function validateResonance(input={}) {
     activityId: String(input.activityId ?? ''),
     faces, initialDice: 2, maxExtra,
     damageType,
-    criticalMode: 'no-base-doubling'
+    criticalMode: 'no-base-doubling',
+    mode: input.mode === 'separate' ? 'separate' : 'inline'
   };
 }
 export function validateVestige(input={}) {
   const range = finiteRange(input.range ?? 60, 5, 500, t('Label.Range'));
-  if (!['none','aura','beacon'].includes(input.lightPreset ?? 'aura')) throw fail('Err.CompanionLight');
+  const lightPreset = input.lightPreset ?? 'aura';
+  if (lightPreset !== 'none' && !isTokenLightPreset(lightPreset)) throw fail('Err.CompanionLight');
+  const costMode = companionCostMode(input);
   if (!['bonus','action','free'].includes(input.commandCost ?? 'bonus')) throw fail('Err.CommandCost');
   return {
     companionUuid: String(input.companionUuid ?? ''),
     state: normalizedCompanionState(input.state),
-    range, requireCasting: Boolean(input.requireCasting ?? true),
+    range, costMode, requireCasting: costMode === 'spell',
     castingItemUuid: String(input.castingItemUuid ?? ''),
     castingActivityId: String(input.castingActivityId ?? ''),
-    lightPreset: input.lightPreset ?? 'aura',
+    lightPreset,
+    grantOwnership: Boolean(input.grantOwnership ?? true),
     commandCost: input.commandCost ?? 'bonus',
     requireOutsideCombatRecall: Boolean(input.requireOutsideCombatRecall ?? true),
     allowPlayerControls: Boolean(input.allowPlayerControls ?? true),
@@ -37,6 +42,15 @@ export function validateVestige(input={}) {
     vanishOnDeath: Boolean(input.vanishOnDeath ?? true),
     enabled: Boolean(input.enabled ?? true)
   };
+}
+/**
+ * How Manifest is paid. Bindings saved before 0.8.0 have no costMode: a chosen spell keeps 'spell',
+ * "no slot" becomes 'free', and "spell" without a spell chosen becomes 'slot'.
+ */
+export function companionCostMode(input = {}) {
+  if (['slot','spell','free'].includes(input.costMode)) return input.costMode;
+  if (input.requireCasting === false) return 'free';
+  return input.castingItemUuid && input.castingActivityId ? 'spell' : 'slot';
 }
 function normalizedCompanionState(state) {
   return ['unbound','dismissed','manifested','dormant','destroyed'].includes(state) ? state : 'unbound';

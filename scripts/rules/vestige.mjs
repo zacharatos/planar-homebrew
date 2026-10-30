@@ -1,23 +1,38 @@
 import {ID,RULES,DEFAULT_VESTIGE} from '../core/constants.mjs';
 import {t,tw,fail} from '../i18n.mjs';
-import {validateVestige,nearestVacant,isCombatActive} from '../core/validation.mjs';
+import {validateVestige,nearestVacant,isCombatActive,companionCostMode} from '../core/validation.mjs';
 import {transition} from '../core/state.mjs';
-import {ALLOWED_ACTIONS,LIGHT_PRESETS,slotSnapshot,consumedExactlyOneSlot,isAuthorizedOwner,validateRequestShape,
-  validateTokenPosition,commandKey,vestigeMaxHP,classLevel} from '../core/companion-helpers.mjs';
+import {ALLOWED_ACTIONS,slotSnapshot,consumedExactlyOneSlot,isAuthorizedOwner,validateRequestShape,
+  validateTokenPosition,commandKey,vestigeMaxHP,classLevel,availableSlots} from '../core/companion-helpers.mjs';
+import {buildTokenLight,isTokenLightPreset} from '../core/token-lights.mjs';
 
-/** Bound Companion: only explicitly configured world Actors; no arbitrary token creation API. */
+/**
+ * Bound Companion (0.8.0): a world actor (Marigia's vestige, a familiar) bound to a hero.
+ * - Manifest is paid on the player's own client (one Pact/spell slot they pick, the hero's spell, or free);
+ *   the token is placed by the GM's client next to the hero, automatically. If placing fails, a slot paid
+ *   by the module is given back.
+ * - Players' Manifest / Return / Recall / Dismiss go to the active GM's client through CONFIG.queries.
+ *   GM approval is a world setting ("companionApproval", off by default): the binding itself is the GM's
+ *   permission. Command is local (a flag and a chat line).
+ */
 export const vestigeRule=Object.freeze({id:RULES.VESTIGE,name:'Rule.Companion.Name',target:'Rule.Companion.Target',description:'Rule.Companion.Hint'});
 const pending=new Set();
 const expectedDeletes=new Set();
-const reservations=new Map(); // Transient GM reservations for preflight → native cast → placement.
 const GM_QUERY=`${ID}.companionRequest`;
-const MAX_RESERVATION_AGE=120_000;
+const PLAYER_ACTIONS=['manifest','return','recall','dismiss'];
 const cleanError=error=>String(error?.message??error);
 const gmOnly=()=>{if(!game.user.isGM)throw fail('Err.GMAuthorize');};
 const coordinator=()=>game.users.activeGM?.id===game.user.id;
-const flags=actor=>({...DEFAULT_VESTIGE,...(actor?.getFlag(ID,'vestige')??{})});
+const approvalRequired=()=>{try{return Boolean(game.settings.get(ID,'companionApproval'));}catch{return false;}};
+/** The binding, with defaults and the 0.8.0 cost mode worked out for older bindings. */
+export const companionConfig=actor=>{
+  const stored=actor?.getFlag?.(ID,'vestige')??{};
+  return {...DEFAULT_VESTIGE,...stored,costMode:companionCostMode(stored)};
+};
+const flags=companionConfig;
 const worldActor=a=>a && a.parent==null && game.actors.get(a.id)===a;
 const currentScene=()=>{if(!canvas?.scene)throw fail('Err.OpenScene');return canvas.scene;};
+const companionOf=config=>game.actors.get(String(config.companionUuid??'').split('.')[1]);
 const validBound=(summoner,config,companion)=>{
   if(!worldActor(summoner))throw fail('Err.SummonerRequired');
   if(!config.enabled)throw fail('Err.BindingDisabled');
@@ -39,11 +54,11 @@ function linkedTokens(companion){
   return output;
 }
 function getAnchor(summoner,scene) {
-  return (canvas.scene?.id===scene.id ? canvas.tokens?.controlled?.map(tok=>tok.document).find(tok=>tok.actorId===summoner.id) : null)??
-    scene.tokens.find(tok=>tok.actorId===summoner.id);
+  return (canvas?.scene?.id===scene.id ? canvas.tokens?.controlled?.map(tok=>tok.document).find(tok=>tok.actorId===summoner.id) : null)??
+    [...scene.tokens].find(tok=>tok.actorId===summoner.id);
 }
 export function resolveCastingActivity(summoner, config) {
-  if (!config.requireCasting) return null;
+  if (config.costMode!=='spell') return null;
   const item=summoner.items.find(i=>i.uuid===config.castingItemUuid);
   if(!item || item.type!=='spell')throw fail('Err.ChooseSpell');
   const activity=item.system?.activities?.get?.(config.castingActivityId);
@@ -51,32 +66,30 @@ export function resolveCastingActivity(summoner, config) {
   if(activity.type==='summon')throw fail('Err.NoSummonActivity');
   return activity;
 }
+/** Checks before anything is paid or placed. Without a point, the nearest free square next to the hero is used. */
 function preflight(summoner,sceneId,point,stateExpected) {
   const config=flags(summoner);
-  const companion=game.actors.get(config.companionUuid?.split('.')[1]);
+  const companion=companionOf(config);
   validBound(summoner,config,companion);
   if(stateExpected==='dormant'&&Number(companion.system?.attributes?.hp?.value)<=0)throw fail('Err.ZeroHPReturn');
-  // In 'vestige' mode every manifestation restores full HP, so a 0 HP vestige may be cast again.
-  if(stateExpected==='dismissed'&&config.hpMode!=='vestige'&&Number(companion.system?.attributes?.hp?.value)<=0)throw fail('Err.ZeroHPCast');
-  if(stateExpected==='destroyed'&&(!Number.isFinite(Number(companion.system?.attributes?.hp?.max))||Number(companion.system?.attributes?.hp?.max)<1))throw fail('Err.MaxHP');
   if(config.state!==stateExpected)throw fail('Err.WrongState',{state:t(`State.${config.state}`),expected:t(`State.${stateExpected}`)});
-  if(findTokens(summoner).length||linkedTokens(companion).length)throw fail('Err.TokenExists');
+  const existing=[...findTokens(summoner),...linkedTokens(companion)];
+  if(existing.length)throw fail('Err.CompanionTokenExists',{companion:companion.name,scene:existing[0].scene.name});
   const scene=game.scenes.get(sceneId);
   if(!scene)throw fail('Err.SceneMissing');
   const anchor=getAnchor(summoner,scene);
   if(!anchor)throw fail('Err.PlaceNamed',{name:summoner.name});
+  if(stateExpected==='dormant'&&config.requireOutsideCombatRecall&&combatOn(scene.id))throw fail('Err.ReturnInCombat');
   const step=Number(scene.grid?.size),feet=Number(scene.grid?.distance);
   const width=(Number(companion.prototypeToken?.width)||1)*step;
   const height=(Number(companion.prototypeToken?.height)||1)*step;
   const occupied=[...scene.tokens].map(tok=>({x:tok.x,y:tok.y,w:(tok.width||1)*step,h:(tok.height||1)*step}));
   const bounds=scene.dimensions;
-  const chosen=validateTokenPosition({point,anchor,width,height,step,gridFeet:feet,rangeFeet:config.range,
+  const target=point??nearestVacant({anchor,occupied,width,height,step,maxDistancePixels:config.range/feet*step});
+  if(!target)throw fail('Err.NoFreeSpace');
+  const chosen=validateTokenPosition({point:target,anchor,width,height,step,gridFeet:feet,rangeFeet:config.range,
     sceneWidth:Number(bounds?.width),sceneHeight:Number(bounds?.height),occupied});
-  if(stateExpected==='dormant'&&config.requireOutsideCombatRecall&&combatOn(scene.id))throw fail('Err.ReturnInCombat');
   return {config,companion,scene,point:chosen};
-}
-function clearExpiredReservations(){
-  for(const [key,r] of reservations)if(Date.now()-r.created>MAX_RESERVATION_AGE)reservations.delete(key);
 }
 async function withLock(summoner,action){
   if(pending.has(summoner.uuid))throw fail('Err.CompanionBusy');
@@ -92,21 +105,44 @@ export async function inspectVestige(summoner){
   if(config.state==='manifested'&&tokens.length!==1)errors.push(t('Companion.TokenCount',{count:tokens.length}));
   if(config.state!=='manifested'&&tokens.length)errors.push(t('Companion.StrayToken'));
   if(companion&&linkedTokens(companion).length>1)errors.push(t('Companion.DuplicateTokens'));
-  if(config.requireCasting){try{resolveCastingActivity(summoner,config);}catch(e){errors.push(e.message);}}
+  if(config.costMode==='spell'){try{resolveCastingActivity(summoner,config);}catch(e){errors.push(e.message);}}
   return {config,companion,tokens,errors};
 }
+/** The hero's players get OWNER of the companion actor, so they can move it and use its actions. */
+async function shareCompanion(summoner,companion){
+  const OWNER=globalThis.CONST?.DOCUMENT_OWNERSHIP_LEVELS?.OWNER??3;
+  const ownership={...(companion.ownership??{})};
+  let changed=false;
+  for(const user of game.users){
+    if(user.isGM||!summoner.testUserPermission(user,'OWNER'))continue;
+    if(ownership[user.id]!==OWNER){ownership[user.id]=OWNER;changed=true;}
+  }
+  if(changed)await companion.update({ownership});
+  return changed;
+}
+/**
+ * GM: bind a companion to a hero. If the companion already stands on a scene (placed by hand), that
+ * token is adopted: the binding starts as manifested instead of refusing.
+ */
 export async function bindVestige(summoner,companion,options={}){
   gmOnly();
   if(!worldActor(summoner)||!worldActor(companion))throw fail('Err.SelectWorldActors');
   if(summoner.id===companion.id)throw fail('Err.SameActor');
   const original=await inspectVestige(summoner);
-  if(original.tokens.length||original.config.state==='manifested')throw fail('Err.DismissFirst');
+  const sameCompanion=original.config.companionUuid===companion.uuid;
+  if(!sameCompanion&&(original.tokens.length||original.config.state==='manifested'))throw fail('Err.DismissFirst');
   const other=game.actors.contents.find(a=>a.id!==summoner.id&&a.getFlag(ID,'vestige')?.companionUuid===companion.uuid);
   if(other)throw fail('Err.AlreadyBound',{name:other.name});
-  if(linkedTokens(companion).length)throw fail('Err.CompanionHasToken');
-  const newConfig=validateVestige({...DEFAULT_VESTIGE,...options,companionUuid:companion.uuid,state:'dismissed'});
-  if(newConfig.requireCasting)resolveCastingActivity(summoner,newConfig);
+  const linked=linkedTokens(companion);
+  if(linked.length>1)throw fail('Err.CompanionHasToken');
+  const keepState=sameCompanion&&original.config.state!=='unbound'?original.config.state:null;
+  const state=linked.length===1?'manifested':keepState&&keepState!=='manifested'?keepState:'dismissed';
+  const newConfig=validateVestige({...DEFAULT_VESTIGE,...options,companionUuid:companion.uuid,state});
+  if(newConfig.costMode==='spell')resolveCastingActivity(summoner,newConfig);
+  if(linked.length===1&&linked[0].token.getFlag(ID,'summonerUuid')!==summoner.uuid)
+    await linked[0].token.update({[`flags.${ID}.summonerUuid`]:summoner.uuid});
   await summoner.setFlag(ID,'vestige',newConfig);
+  if(newConfig.grantOwnership)await shareCompanion(summoner,companion);
   return newConfig;
 }
 export async function unbindVestige(summoner){
@@ -116,39 +152,34 @@ export async function unbindVestige(summoner){
 }
 export function suggestCompanionPosition(summoner) {
   const scene=currentScene(),config=flags(summoner);
-  const companion=game.actors.get(config.companionUuid?.split('.')[1]);
-  validBound(summoner,config,companion);
-  const anchor=getAnchor(summoner,scene);
-  if(!anchor)throw fail('Err.PlaceSummoner');
-  const step=Number(scene.grid.size),feet=Number(scene.grid.distance);
-  const occupied=[...scene.tokens].map(tok=>({x:tok.x,y:tok.y,w:(tok.width||1)*step,h:(tok.height||1)*step}));
-  const found=nearestVacant({anchor,occupied,width:(companion.prototypeToken.width||1)*step,
-    height:(companion.prototypeToken.height||1)*step,step,maxDistancePixels:config.range/feet*step});
-  if(!found)throw fail('Err.NoFreeSpace');
-  return found;
+  return preflight(summoner,scene.id,undefined,config.state==='dormant'?'dormant':config.state).point;
 }
 async function placeToken(summoner,sceneId,point,expectedState){
   const {config,companion,scene,point:chosen}=preflight(summoner,sceneId,point,expectedState);
   transition(config.state,'manifested');
-  if(config.hpMode==='vestige'&&expectedState!=='dormant'){
-    // Manifest Vestige: the vestige comes out with the AU stat block's HP for the warlock's level, at full HP.
-    const max=vestigeMaxHP(classLevel(summoner,'warlock'));
-    await companion.update({'system.attributes.hp.max':max,'system.attributes.hp.value':max});
-  }else if(expectedState==='destroyed'){
-    const max=Number(companion.system?.attributes?.hp?.max);
+  if(expectedState!=='dormant'){
+    // A new casting: the companion comes back at full HP (house rule). In 'vestige' mode its maximum
+    // is the AU Vestige Companion's 4 + 4 × Warlock level.
+    const max=config.hpMode==='vestige'?vestigeMaxHP(classLevel(summoner,'warlock')):Number(companion.system?.attributes?.hp?.max);
     if(!Number.isFinite(max)||max<1)throw fail('Err.MaxHP');
-    await companion.update({'system.attributes.hp.value':max});
+    await companion.update(config.hpMode==='vestige'?{'system.attributes.hp.max':max,'system.attributes.hp.value':max}:{'system.attributes.hp.value':max});
   }
-  const doc=await companion.getTokenDocument({ ...chosen,actorLink:true,
-    light:LIGHT_PRESETS[config.lightPreset],flags:{[ID]:{summonerUuid:summoner.uuid}} });
-  const created=await scene.createEmbeddedDocuments('Token',[doc.toObject()]);
+  const doc=await companion.getTokenDocument({...chosen,actorLink:true});
+  const data=doc.toObject();
+  data.flags={...(data.flags??{}),[ID]:{...(data.flags?.[ID]??{}),summonerUuid:summoner.uuid}};
+  if(config.lightPreset!=='none'&&isTokenLightPreset(config.lightPreset)){
+    data.light=buildTokenLight(config.lightPreset,{units:scene.grid?.units,current:data.light??{},animations:globalThis.CONFIG?.Canvas?.lightAnimations});
+    data.flags[ID].tokenLight=config.lightPreset;
+  }
+  const created=await scene.createEmbeddedDocuments('Token',[data]);
   if(created?.length!==1)throw fail('Err.TokenNotCreated');
   try{await summoner.setFlag(ID,'vestige',{...config,state:'manifested'});}
   catch(e){expectedDeletes.add(created[0].uuid);await scene.deleteEmbeddedDocuments('Token',[created[0].id]);throw e;}
-  try{await companionChat(summoner,companion,'Manifest','Chat.CompanionAppears',{companion:companion.name,scene:scene.name});}
+  const kind=expectedState==='dormant'?'Return':'Manifest';
+  try{await companionChat(summoner,companion,kind,expectedState==='dormant'?'Chat.CompanionReturns':'Chat.CompanionAppears',{companion:companion.name,scene:scene.name});}
   catch(error){console.warn(`${ID}: token created, but chat announcement failed`,error);}
   try{await syncCombat(summoner,created[0]);}catch(e){console.warn(`${ID} combat initiative:`,e);}
-  return t('Companion.Manifested',{companion:companion.name,scene:scene.name});
+  return t(expectedState==='dormant'?'Companion.Returned':'Companion.Manifested',{companion:companion.name,scene:scene.name});
 }
 /** Public chat line: written in the world's text language, since everyone reads it. */
 async function companionChat(summoner,companion,action,bodyKey,data){
@@ -162,10 +193,15 @@ async function removeTokens(tokens){
     catch(error){expectedDeletes.delete(token.uuid);throw error;}
   }
 }
-async function actAsGM(summoner,action,point,sceneId){
+/** Carry out an action on this client (the GM's, except Command). The cost of Manifest is already paid. */
+async function doAction(summoner,action,{point,sceneId}={}){
   return withLock(summoner,async()=>{
     const inspection=await inspectVestige(summoner),{config,companion,tokens}=inspection;
     validBound(summoner,config,companion);
+    if(action==='manifest'){
+      if(!['dismissed','destroyed'].includes(config.state))throw fail('Err.CannotManifest');
+      return placeToken(summoner,sceneId??currentScene().id,point,config.state);
+    }
     if(action==='return')return placeToken(summoner,sceneId??currentScene().id,point,'dormant');
     if(action==='recall'){
       transition(config.state,'dormant');
@@ -202,7 +238,7 @@ async function actAsGM(summoner,action,point,sceneId){
 }
 async function syncCombat(summoner,token){
   if(!game.user.isGM)return;
-  const combat=combatOn(token.parent.id);
+  const combat=combatOn(token.parent?.id);
   if(!combat)return;
   const source=combat.combatants.find(c=>c.actor?.id===summoner.id);
   if(!source)return;
@@ -215,137 +251,122 @@ async function syncCombat(summoner,token){
     await companionCombatant.update({initiative});
   }
 }
-async function nativeCast(summoner,config){
-  if(!config.requireCasting)return;
-  const activity=resolveCastingActivity(summoner,config);
-  const before=slotSnapshot(summoner);
-  let consumptionHookSeen=false;
-  const callback=(usedActivity)=>{
-    if(usedActivity?.item?.uuid===activity.item.uuid && usedActivity?.id===activity.id) consumptionHookSeen=true;
-  };
-  Hooks.on('dnd5e.postActivityConsumption',callback);
-  try{await activity.use();}
-  finally{Hooks.off('dnd5e.postActivityConsumption',callback);}
-  const after=slotSnapshot(summoner);
-  if(!consumptionHookSeen || !consumedExactlyOneSlot(before,after)) {
-    throw fail('Err.NoSlotSpent');
+
+// ---- Paying for Manifest (on the caller's client) ----
+
+/** Ask which slot to spend (Pact Magic first). Returns a slot key, or null if the player closed the dialog. */
+async function chooseSlot(summoner,slots){
+  const esc=v=>foundry.utils.escapeHTML(String(v));
+  const label=s=>s.key==='pact'?t('Companion.SlotPact',{level:s.level,left:s.value,max:s.max}):t('Companion.SlotLevel',{level:s.level,left:s.value,max:s.max});
+  const data=await foundry.applications.api.DialogV2.input({window:{title:t('Companion.PayTitle',{name:summoner.name})},
+    content:`<div class="planar-form"><p>${t('Companion.PayHint')}</p><div class="form-group"><label>${esc(t('Companion.Slot'))}</label><select name="slot">${slots.map((s,i)=>`<option value="${esc(s.key)}" ${i===0?'selected':''}>${esc(label(s))}</option>`).join('')}</select></div></div>`,
+    rejectClose:false,ok:{label:t('Companion.Action.manifest')}});
+  const key=data?.slot??data?.get?.('slot');
+  return key?String(key):null;
+}
+/**
+ * Pay the cost of a new casting. Returns {key,value} for a slot the module spent (so it can be given back),
+ * {} for a spell cast through the sheet or a free manifestation, or null if the player cancelled.
+ */
+async function payForManifest(summoner,config,{slotKey}={}){
+  if(config.costMode==='free')return {};
+  if(config.costMode==='spell'){
+    const activity=resolveCastingActivity(summoner,config);
+    const before=slotSnapshot(summoner);
+    const used=await activity.use();
+    if(!used)return null;
+    if(!consumedExactlyOneSlot(before,slotSnapshot(summoner)))ui.notifications?.warn?.(t('Note.NoSlotSeen',{name:summoner.name}));
+    return {};
   }
+  const slots=availableSlots(summoner);
+  if(!slots.length)throw fail('Err.NoSlotLeft',{name:summoner.name});
+  const key=slotKey??await chooseSlot(summoner,slots);
+  if(!key)return null;
+  const slot=slots.find(s=>s.key===key);
+  if(!slot)throw fail('Err.NoSlotLeft',{name:summoner.name});
+  await summoner.update({[`system.spells.${key}.value`]:slot.value-1});
+  return {key,value:slot.value};
 }
+async function refundSlot(summoner,paid){
+  if(!paid?.key)return false;
+  try{await summoner.update({[`system.spells.${paid.key}.value`]:paid.value});return true;}
+  catch(error){console.error(`${ID}: could not give the slot back`,error);return false;}
+}
+
+// ---- Player → GM ----
+
 function gmClient(){const gm=game.users.activeGM;if(!gm?.active)throw fail('Err.NeedActiveGM');return gm;}
-async function queryGM(data){
+async function askGM(data){
   const gm=gmClient();
-  if(game.user.id===gm.id)return handleGMRequest(data);
-  return gm.query(GM_QUERY,data,{timeout:120000});
+  const result=await gm.query(GM_QUERY,{...data,userId:game.user.id},{timeout:120000});
+  if(!result?.ok)throw new Error(result?.error||t('Err.GMPlaceFailed'));
+  return result.message;
 }
-async function requestGMApproval(summoner,action,point){
-  const gm=gmClient();
-  if(game.user.id===gm.id)return;
-  const ok=await queryGM({phase:'approval',action,summonerUuid:summoner.uuid,point});
-  if(!ok?.approved)throw fail('Err.GMDeclined');
-}
-/** A user-query handler cannot authenticate the initiator. A GM must explicitly authorize requests. */
+/**
+ * The GM's side of a player's request. Foundry's query doesn't name the sender, so the request carries the
+ * user id and the GM checks that this user owns the hero (fine for a table of friends; turn on
+ * "companionApproval" to confirm every request by hand).
+ */
 async function handleGMRequest(request){
   gmOnly(); if(!coordinator())throw fail('Err.ActiveGMOnly');
-  clearExpiredReservations();
-  const {phase,action,summonerUuid,point,nonce,sceneId}=request??{};
-  if(phase==='cancel'){
-    const entry=reservations.get(summonerUuid);
-    if(entry?.nonce===nonce)reservations.delete(summonerUuid);
-    return {cancelled:true};
-  }
+  const {action,summonerUuid,userId,point,sceneId}=request??{};
   validateRequestShape({action,summonerUuid,...(point?{point}:{})});
+  if(!PLAYER_ACTIONS.includes(action))throw fail('Err.PlayerActionDenied');
   const summoner=await fromUuid(summonerUuid);
   if(!worldActor(summoner))throw fail('Err.WorldActorMissing');
+  const user=game.users.get?.(userId);
+  if(!user||!isAuthorizedOwner(summoner,user))throw fail('Err.SummonerOwner');
   const config=flags(summoner);
-  if(!config.allowPlayerControls)throw fail('Err.PlayerControlsOff');
-  // As Foundry's query API does not authenticate the requesting user, NO player request silently executes.
-  // The GM authorizes this configured Actor/action explicitly, never an arbitrary target or document update.
-  if(phase==='prepare'){
-    if(action!=='manifest')throw fail('Err.QueryPhase');
-    if(reservations.has(summonerUuid))throw fail('Err.AlreadyReserved');
-    if(!['dismissed','destroyed'].includes(config.state))throw fail('Err.CannotManifest');
-    const checked=preflight(summoner,sceneId,point,config.state);
-    const approved=await foundry.applications.api.DialogV2.confirm({window:{title:t('Companion.ApproveManifestTitle')},
-      content:`<p>${t('Companion.ApproveManifest',{companion:foundry.utils.escapeHTML(checked.companion.name),summoner:foundry.utils.escapeHTML(summoner.name),scene:foundry.utils.escapeHTML(checked.scene.name)})}</p><p>${t('Companion.ApproveManifestHint')}</p>`,rejectClose:false,modal:true});
-    if(!approved)return {approved:false};
-    const tokenNonce=foundry.utils.randomID();
-    reservations.set(summonerUuid,{nonce:tokenNonce,created:Date.now(),sceneId,point:checked.point,
-      before:slotSnapshot(summoner),expectedState:config.state,castingRequired:config.requireCasting});
-    return {approved:true,nonce:tokenNonce};
-  }
-  if(phase==='commit'){
-    if(action!=='manifest')throw fail('Err.QueryPhase');
-    const reservation=reservations.get(summonerUuid);
-    if(!reservation||reservation.nonce!==nonce)throw fail('Err.ReservationMissing');
-    reservations.delete(summonerUuid);
-    if(Date.now()-reservation.created>MAX_RESERVATION_AGE)throw fail('Err.ReservationMissing');
-    if(reservation.castingRequired&&!consumedExactlyOneSlot(reservation.before,slotSnapshot(summoner))) {
-      throw fail('Err.GMSlotCheck');
-    }
-    return {message:await withLock(summoner,()=>placeToken(summoner,reservation.sceneId,reservation.point,reservation.expectedState))};
-  }
-  if(phase==='approval'){
-    if(action==='manifest')throw fail('Err.ManifestNative');
-    if(!['return','recall','dismiss'].includes(action))throw fail('Err.PlayerActionDenied');
-    if(!config.enabled || !config.allowPlayerControls)throw fail('Err.PlayerControlsOff');
-    const checked=await inspectVestige(summoner);
-    if(!checked.companion)throw fail('Err.CompanionMissing');
-    // Permission-sensitive operations always require explicit GM approval, never trust claimed userIds.
+  if(!config.enabled||!config.allowPlayerControls)throw fail('Err.PlayerControlsOff');
+  if(approvalRequired()){
+    const companion=companionOf(config);
+    const esc=v=>foundry.utils.escapeHTML(String(v??'?'));
     const approved=await foundry.applications.api.DialogV2.confirm({window:{title:t('Companion.ApproveActionTitle')},
-      content:`<p>${t('Companion.ApproveAction',{action:t(`Companion.Action.${action}`),summoner:foundry.utils.escapeHTML(summoner.name),companion:foundry.utils.escapeHTML(checked.companion.name)})}</p><p>${t('Companion.ApproveActionHint')}</p>`,rejectClose:false,modal:true});
-    if(!approved)return {approved:false};
-    const message=await actAsGM(summoner,action,point,sceneId);
-    return {approved:true,message};
+      content:`<p>${t('Companion.ApproveAction',{user:esc(user.name),action:t(`Companion.Action.${action}`),summoner:esc(summoner.name),companion:esc(companion?.name)})}</p>`,rejectClose:false,modal:true});
+    if(!approved)return {ok:false,error:t('Err.GMDeclined')};
   }
-  throw fail('Err.QueryPhase');
+  return {ok:true,message:await doAction(summoner,action,{point,sceneId})};
 }
 export function registerCompanionQueries(record){
-  CONFIG.queries[GM_QUERY]=async(data)=>{try{return await handleGMRequest(data);}catch(error){record?.(`Companion query error: ${cleanError(error)}`);return {approved:false,error:cleanError(error)};}};
+  CONFIG.queries[GM_QUERY]=async(data)=>{try{return await handleGMRequest(data);}catch(error){record?.(`Companion query error: ${cleanError(error)}`);return {ok:false,error:cleanError(error)};}};
 }
-/** Safe, player-facing entry point. Calls native dnd5e spell Activity for Manifest. */
-export async function performCompanionAction(summoner,action,{point}={}){
+
+/**
+ * The one entry point for windows, the Token HUD and macros: performCompanionAction(hero, action).
+ * Actions: manifest, return, recall, dismiss, command (owner or GM); destroy (GM).
+ * Options: point {x,y} (else the nearest free square by the hero), slotKey ('pact', 'spell1'…; else asked).
+ */
+export async function performCompanionAction(summoner,action,{point,slotKey}={}){
   if(!isAuthorizedOwner(summoner,game.user))throw fail('Err.SummonerOwner');
   if(!ALLOWED_ACTIONS.includes(action))throw fail('Err.CompanionAction');
   const config=flags(summoner);
   if(!config.companionUuid||!config.enabled)throw fail('Err.NoBinding');
   if(!game.user.isGM&&!config.allowPlayerControls)throw fail('Err.PlayerControlsOff');
   if(action==='destroy'&&!game.user.isGM)throw fail('Err.GMDestroy');
-  if(action==='manifest'){
+  if(action==='command')return doAction(summoner,'command');
+  if(action==='manifest'||action==='return'){
     const scene=currentScene();
-    const chosen=point??suggestCompanionPosition(summoner);
-    if(!['destroyed','dismissed'].includes(config.state))throw fail('Err.CannotManifest');
-    preflight(summoner,scene.id,chosen,config.state);
-    if(game.user.isGM){
-      return withLock(summoner,async()=>{
-        if(config.requireCasting)await nativeCast(summoner,config);
-        return placeToken(summoner,scene.id,chosen,config.state);
-      });
-    }
-    const permissionGranted=await queryGM({phase:'prepare',action,summonerUuid:summoner.uuid,
-      sceneId:scene.id,point:chosen});
-    if(!permissionGranted?.approved)throw new Error(permissionGranted?.error||t('Err.GMDidNotAuthorize'));
+    const expected=action==='return'?'dormant':config.state;
+    if(action==='manifest'&&!['dismissed','destroyed'].includes(config.state))throw fail('Err.CannotManifest');
+    // Check placement before anything is paid.
+    const checked=preflight(summoner,scene.id,point,expected);
+    const paid=action==='manifest'?await payForManifest(summoner,config,{slotKey}):{};
+    if(!paid)return '';
     try{
-      await nativeCast(summoner,config);
-      const result=await queryGM({phase:'commit',action,summonerUuid:summoner.uuid,nonce:permissionGranted.nonce});
-      if(!result?.message)throw new Error(result?.error||t('Err.GMPlaceFailed'));
-      return result.message;
+      if(game.user.isGM)return await doAction(summoner,action,{point:checked.point,sceneId:scene.id});
+      return await askGM({action,summonerUuid:summoner.uuid,sceneId:scene.id,point:checked.point});
     }catch(error){
-      try{await queryGM({phase:'cancel',summonerUuid:summoner.uuid,nonce:permissionGranted.nonce});}catch{ /* GM offline */ }
+      if(await refundSlot(summoner,paid))throw new Error(cleanError(error)+' '+t('Companion.SlotRefunded'));
       throw error;
     }
   }
-  // Command is an ordinary owner-authorized Actor flag/chat action, never a privileged token mutation.
-  if(action==='command')return actAsGM(summoner,'command');
-  if(action==='return'){
-    const scene=currentScene(),chosen=point??suggestCompanionPosition(summoner);
-    preflight(summoner,scene.id,chosen,'dormant');
-    if(game.user.isGM)return actAsGM(summoner,'return',chosen,scene.id);
-  }else if(game.user.isGM)return actAsGM(summoner,action,point);
-  const result=await queryGM({phase:'approval',action,summonerUuid:summoner.uuid,point,sceneId:action==='return'?currentScene().id:undefined});
-  if(!result?.approved)throw new Error(result?.error||t('Err.GMDeclined'));
-  return result.message;
+  if(game.user.isGM)return doAction(summoner,action);
+  return askGM({action,summonerUuid:summoner.uuid});
 }
-/** GM-only repair for the common stale-state case (token was deleted while no GM was online). */
+/**
+ * GM-only repair: a dormant companion at 0 HP becomes destroyed; a manifested one without a token becomes
+ * dismissed; a companion standing on a scene without the module knowing it is adopted as manifested.
+ */
 export async function repairCompanionState(summoner){
   gmOnly();
   return withLock(summoner,async()=>{
@@ -355,8 +376,18 @@ export async function repairCompanionState(summoner){
       return t('Companion.RepairedDestroyed');
     }
     if(config.state==='manifested'&&tokens.length===0){
+      const linked=companion?linkedTokens(companion):[];
+      if(linked.length===1){await linked[0].token.update({[`flags.${ID}.summonerUuid`]:summoner.uuid});return t('Companion.RepairedAdopted');}
       await summoner.setFlag(ID,'vestige',{...config,state:'dismissed'});
       return t('Companion.RepairedDismissed');
+    }
+    if(config.state!=='manifested'&&companion){
+      const linked=linkedTokens(companion);
+      if(linked.length===1){
+        await linked[0].token.update({[`flags.${ID}.summonerUuid`]:summoner.uuid});
+        await summoner.setFlag(ID,'vestige',{...config,state:'manifested'});
+        return t('Companion.RepairedAdopted');
+      }
     }
     throw fail('Err.NoRepair');
   });
@@ -378,9 +409,20 @@ export async function vanishWithSummoner(summoner){
     return t('Companion.Vanished',{companion:companion?.name??'?'});
   });
 }
+/** Heroes this user may control a companion for (GM: every bound hero). */
+export function companionHeroes(user=game.user){
+  return game.actors.contents.filter(a=>a.getFlag(ID,'vestige')?.companionUuid&&(user.isGM||a.testUserPermission(user,'OWNER')));
+}
+/** The hero a token belongs to as companion, or the token's own actor if it is a bound hero. */
+export function heroForToken(tokenDoc){
+  const summonerUuid=tokenDoc?.getFlag?.(ID,'summonerUuid');
+  if(summonerUuid)return game.actors.get(String(summonerUuid).split('.')[1])??null;
+  const actor=tokenDoc?.actor;
+  return actor?.getFlag?.(ID,'vestige')?.companionUuid?game.actors.get(actor.id)??null:null;
+}
 
 /** Keep legacy GM API surface. */
-export async function manifestVestige(summoner){gmOnly();return performCompanionAction(summoner,'manifest');}
+export async function manifestVestige(summoner,options){gmOnly();return performCompanionAction(summoner,'manifest',options);}
 export async function returnVestige(summoner){gmOnly();return performCompanionAction(summoner,'return');}
 export async function recallVestige(summoner){gmOnly();return performCompanionAction(summoner,'recall');}
 export async function dismissVestige(summoner){gmOnly();return performCompanionAction(summoner,'dismiss');}

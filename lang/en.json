@@ -7,7 +7,8 @@
         "Dismiss": "Dismiss",
         "Manifest": "Manifest",
         "Recall": "Recall",
-        "Vanish": "Vanishes"
+        "Vanish": "Vanishes",
+        "Return": "Return"
       },
       "CompanionAppears": "{companion} appears in {scene}.",
       "CompanionCommand": "{summoner} commands {companion} ({cost}). It acts from its own sheet.",
@@ -28,7 +29,9 @@
       "ResonanceMatched": "Silver Eagle Resonance!",
       "ResonanceTotal": "Damage: {from} → {to} {type}",
       "Revived": "{name} suddenly regains consciousness with 1 HP!",
-      "Stable": "{name} has stabilized."
+      "Stable": "{name} has stabilized.",
+      "CompanionReturns": "{companion} returns ({scene}).",
+      "ResonanceSeparate": "{item}: matching dice ({first}, {second}): chaining dice"
     },
     "Common": {
       "Actions": "Actions",
@@ -61,14 +64,10 @@
         "returnFree": "Return (free)",
         "unbind": "Unbind"
       },
-      "ApproveAction": "Approve <strong>{action}</strong> for <strong>{summoner}</strong> and <strong>{companion}</strong>?",
-      "ApproveActionHint": "Approve only a request you expect: Foundry doesn't say who sent it.",
+      "ApproveAction": "<strong>{user}</strong> asks: <strong>{action}</strong> for <strong>{summoner}</strong> and <strong>{companion}</strong>. Allow?",
       "ApproveActionTitle": "Approve a companion action",
-      "ApproveManifest": "Let <strong>{companion}</strong> appear for <strong>{summoner}</strong> in <strong>{scene}</strong>?",
-      "ApproveManifestHint": "Foundry doesn't say which player sent this, so approve only if you expect this hero to cast now. The slot is checked again before the token is placed.",
-      "ApproveManifestTitle": "Approve a companion",
       "Bind": "Bind a companion",
-      "BindHint": "Choose the companion's world actor. To pay with a spell slot, choose a spell activity that spends one slot the normal dnd5e way (not a Summon activity: that would make a second token).",
+      "BindHint": "Pick the companion's actor (it must exist in the Actors directory). Defaults fit Marigia's vestige: one slot to manifest, Vestige Companion HP, a spectral aura. If the companion is already on the map, its token is adopted.",
       "BindTitle": "Bind a companion: {name}",
       "Bound": "{companion} is bound to {summoner}",
       "ChooseSummoner": "Which hero?",
@@ -81,12 +80,10 @@
         "dismiss": "Dismiss this companion? Bringing it back takes a new casting."
       },
       "ConfirmUnbind": "Remove this binding for good?",
-      "ControllerIntro": "Bring out your familiar, vestige or other companion. The spell is cast through your sheet's normal activity; the GM approves token changes.",
-      "ControllerNotes": "Recall and return outside combat spend no slot. A commanded companion acts from its own sheet; one command per round is tracked, but its action is yours to take.",
+      "ControllerIntro": "Bring out your companion, send it away, command it and use its actions. It appears next to your hero's token; drag it where you want.",
+      "ControllerNotes": "Manifest spends one slot (or what the GM set). Recall and Return spend nothing. Dismiss ends it: the next Manifest needs a new slot. One command per round is tracked in combat.",
       "ControllerTitle": "Bound companions",
       "Cost": "Cost to manifest",
-      "CostFree": "No spell slot",
-      "CostSpell": "Cast the chosen spell (one slot)",
       "Destroyed": "{companion} destroyed",
       "Dismissed": "{companion} dismissed",
       "DuplicateTokens": "Duplicate linked tokens",
@@ -99,21 +96,14 @@
       "HPMode": "Hit points",
       "InCombatToo": "In combat too",
       "Light": "Spectral light",
-      "LightPreset": {
-        "aura": "Violet aura (0 / 15 ft)",
-        "beacon": "Beacon (10 / 30 ft)",
-        "none": "No light"
-      },
-      "ManagerNotes": "Manifest and Return ask for a free square. A live GM approves player requests. Returning a dormant companion spends no slot. Without a command the companion takes the Dodge action; a command is announced in chat, the action economy is not enforced.",
+      "ManagerNotes": "Players' requests run on your client automatically (turn on \"GM approves companion actions\" in the settings to confirm each one). The companion appears next to its hero; dismissed or destroyed companions come back at full HP with a new casting.",
       "Manifested": "{companion} manifested ({scene})",
       "MissingActor": "actor missing",
       "None": "No companion bound yet",
       "NoneOwned": "None of your characters has a bound companion",
       "OutsideCombat": "Outside combat only",
-      "PlaceHint": "Scene pixel coordinates. The nearest free square is filled in; change X/Y to put it elsewhere. Range, free space and the scene edge are checked before any spell is cast. The hero's token must be on this scene.",
-      "PlaceTitle": "Place the companion: {name}",
       "PlayerControls": "Player controls",
-      "PlayerControlsOn": "Yes (the GM approves token changes)",
+      "PlayerControlsOn": "Yes (token changes run on the GM's client)",
       "RecallReturn": "Recall / return",
       "Recalled": "{companion} recalled",
       "RepairedDestroyed": "The dormant companion had 0 HP: marked destroyed (a new casting is needed)",
@@ -127,7 +117,25 @@
       "Tokens": "{count} token(s)",
       "Unbound": "Binding removed",
       "Vanish": "Vanishes when the hero dies",
-      "Vanished": "{companion} vanished with its hero"
+      "Vanished": "{companion} vanished with its hero",
+      "Returned": "{companion} returned ({scene})",
+      "RepairedAdopted": "The companion's token on the map is now the bound one: marked manifested",
+      "SlotPact": "Pact Magic slot, level {level} ({left}/{max} left)",
+      "SlotLevel": "Level {level} slot ({left}/{max} left)",
+      "PayTitle": "Manifest: {name}",
+      "PayHint": "Spend one slot. The companion appears next to your token; drag it where you want it.",
+      "Slot": "Slot",
+      "SlotRefunded": "The slot was given back.",
+      "CostMode": {
+        "slot": "Spend one spell slot (Pact first; the player picks)",
+        "spell": "Cast a spell from the sheet (advanced)",
+        "free": "Free (no slot)"
+      },
+      "NoLight": "No light",
+      "Share": "Hero's players own the companion",
+      "More": "More options",
+      "Sheet": "Sheet",
+      "Abilities": "Actions:"
     },
     "Cost": {
       "action": "Action",
@@ -315,7 +323,11 @@
       "WorldActorUuid": "Only world actors can be used",
       "WrongState": "Companion is {state}, expected {expected}",
       "ZeroHPCast": "Companion has zero HP. A GM must fix its HP or mark it Destroyed before casting",
-      "ZeroHPReturn": "Companion has zero HP; it must be marked Destroyed, not returned for free"
+      "ZeroHPReturn": "Companion has zero HP; it must be marked Destroyed, not returned for free",
+      "LightBlackout": "The GM has switched off this token's light; ask the GM to turn it back on first",
+      "NoLightsPicked": "No light sources picked",
+      "CompanionTokenExists": "{companion} already has a token on {scene}. Recall or dismiss it, or ask the GM for Repair (it adopts a token placed by hand).",
+      "NoSlotLeft": "{name} has no spell slot left"
     },
     "Label": {
       "DieFaces": "Die faces",
@@ -419,7 +431,8 @@
       "ResonanceCap": "{item}: resonance reached its safety limit.",
       "ResonanceFailed": "{item}: resonance could not run; the GM should check the console.",
       "ResonanceSkipped": "{item}: resonance skipped ({status}); the damage roll was left as it was.",
-      "SystemUntested": "Planar Homebrew was built for dnd5e 6.0.x; this world runs {version}. Silver Eagle Resonance stays off until you test it."
+      "SystemUntested": "Planar Homebrew was built for dnd5e 6.0.x; this world runs {version}. Silver Eagle Resonance stays off until you test it.",
+      "NoSlotSeen": "{name}: the spell was cast but no spell slot went down; check the sheet."
     },
     "Preset": {
       "beacon": "Spectral beacon",
@@ -448,12 +461,17 @@
       "None": "No weapon has it yet",
       "Saved": "Resonance saved: {actor} → {item}",
       "Title": "Weapons with Silver Eagle Resonance",
-      "WeaponOf": "{name}'s weapon"
+      "WeaponOf": "{name}'s weapon",
+      "Mode": "How the chain is rolled",
+      "ModeOption": {
+        "inline": "Inside the weapon's damage roll (falls back to a separate card)",
+        "separate": "Separate damage card (the tested macro's way)"
+      }
     },
     "Rule": {
       "Companion": {
         "Hint": "A world actor bound to a hero as a familiar or vestige: manifest by casting, recall, return, command.",
-        "Manager": "bind any world actor to a hero. Manifest casts the hero's chosen spell activity and checks that exactly one slot was spent; players ask, and the GM approves anything that creates or removes tokens.",
+        "Manager": "bind any actor to a hero. Manifest spends one slot the player picks (or casts a spell, or is free) and places the token next to the hero; players do it from the companion window or the Token HUD.",
         "Name": "Bound Companion",
         "Target": "Actor"
       },
@@ -465,7 +483,7 @@
       },
       "Light": {
         "Hint": "An inventory item that lights the holder's token, counting ignitions and burn time.",
-        "Manager": "set up single items, or give the standard torches, candles and lanterns their profile in one go. Players light them from the light window or the item's Utility activity; ignitions and world time are tracked.",
+        "Manager": "set up single items, or give the standard torches, candles and lanterns their profile in one go. Players light them from the light window or the item's Utility activity; ignitions and world time are tracked. In the light window, the Token lights tab gives any token (the vestige too) a ready-made light, and Scene lights switches, restores and softens every light.",
         "Name": "Portable Light Source",
         "Target": "Inventory item"
       },
@@ -516,6 +534,10 @@
       "textLanguage": {
         "Hint": "Language of the chat lines everyone reads (deaths, companions) and the default for the module's windows.",
         "Name": "Chat language"
+      },
+      "companionApproval": {
+        "Name": "GM approves companion actions",
+        "Hint": "When on, every player Manifest / Return / Recall / Dismiss asks the GM first. Off: the binding is the permission and it just happens."
       }
     },
     "State": {
@@ -528,7 +550,84 @@
     "Tools": {
       "Companions": "Bound companions",
       "Lights": "Portable lights",
-      "Manager": "Planar Homebrew"
+      "Manager": "Planar Homebrew",
+      "TokenLight": "Token light"
+    },
+    "TokenLight": {
+      "Tab": {
+        "items": "Carried items",
+        "token": "Token lights",
+        "scene": "Scene lights (GM)"
+      },
+      "Group": {
+        "mundane": "Lamps and torches",
+        "spell": "Spells",
+        "vestige": "Spectral",
+        "none": "None"
+      },
+      "Preset": {
+        "candle": "Candle (5/10 ft)",
+        "torch": "Torch (20/40 ft)",
+        "oil": "Oil Lamp (15/45 ft)",
+        "hood": "Hooded Lantern, open (30/60 ft)",
+        "closed": "Hooded Lantern, shut (0/5 ft)",
+        "bull": "Bullseye Lantern, 60° cone (60/120 ft)",
+        "light": "Light cantrip (20/40 ft)",
+        "flame": "Continual Flame (20/40 ft)",
+        "produce": "Produce Flame (10/20 ft)",
+        "day": "Daylight (60/120 ft)",
+        "aura": "Spectral Aura (0/15 ft)",
+        "beacon": "Spectral Beacon (10/30 ft)",
+        "moon": "Moonlit Glow (5/20 ft)",
+        "off": "No light"
+      },
+      "StrengthLevel": {
+        "gentle": "Gentle (recommended)",
+        "balanced": "Balanced",
+        "vivid": "Vivid"
+      },
+      "SwitchAction": {
+        "off": "Turn off (keeps the original)",
+        "on": "Turn on / restore",
+        "toggle": "Toggle each",
+        "soften": "Soften the look (reversible)",
+        "lookrestore": "Restore the original look"
+      },
+      "Scope": {
+        "selected": "Selected on the map ({count})",
+        "manual": "Ticked below",
+        "all": "Every light in this scene"
+      },
+      "Intro": "Give any token you own a light: your hero, a vestige or a familiar. Pick the token (or right-click it on the map → light bulb), choose the light, Apply.",
+      "Notes": "Radii are bright / total dim, in feet. This doesn't spend items, fuel or spell slots: for torches and lamps that burn out, use the Carried items tab. A lit carried item is put out first.",
+      "Token": "Token",
+      "Source": "Light",
+      "Strength": "Look",
+      "Apply": "Apply",
+      "Now": "Light now",
+      "Pick": "Pick",
+      "TurnOff": "Turn off",
+      "NoTokens": "You own no token on this scene.",
+      "SwitchedOff": "Switched off by the GM",
+      "Dark": "No light",
+      "Applied": "{preset} → {token}",
+      "Cleared": "{token}: light off",
+      "Ambient": "Ambient: {name}",
+      "On": "On",
+      "Off": "Off",
+      "OffSaved": "Off (saved)",
+      "Softened": "softened",
+      "SceneIntro": "Ambient lights and token lights of <strong>{scene}</strong>. Magical darkness and Global Illumination are never changed.",
+      "Action": "Action",
+      "Targets": "Targets",
+      "CheckAll": "Tick all",
+      "CheckNone": "Clear ticks",
+      "NoSources": "No light sources on this scene.",
+      "ApplyScene": "Apply to lights",
+      "SceneNotes": "Turn on / restore only brings back lights this tool switched off (also those switched off by the old macro). A hidden ambient light comes on only when picked by hand, never with \"every light\".",
+      "ConfirmAll": "{action}: up to {count} lights on {scene}?",
+      "Failed": "Failed: {names}",
+      "Result": "Lights: {changed} changed, {skipped} skipped, {failed} failed"
     }
   }
 }

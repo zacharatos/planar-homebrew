@@ -1,11 +1,22 @@
 import {fail} from '../i18n.mjs';
 /** Pure helpers for Bound Companion. No Foundry globals, testable with Node. */
 export const ALLOWED_ACTIONS = Object.freeze(['manifest','return','recall','dismiss','destroy','command']);
-export const LIGHT_PRESETS = Object.freeze({
-  none: {bright: 0, dim: 0},
-  aura: {bright: 0, dim: 15, color: '#a48eff', alpha: 0.2},
-  beacon: {bright: 10, dim: 30, color: '#a48eff', alpha: 0.22}
-});
+
+/**
+ * Spell slots a hero could pay Manifest with: Pact Magic first, then spell levels low to high.
+ * Each entry: {key: 'pact'|'spellN', level, value, max}. Only slots with at least one left.
+ */
+export function availableSlots(actor) {
+  const spells = actor?.system?.spells ?? {};
+  const out = [];
+  const pact = spells.pact;
+  if (Number(pact?.value) > 0 && Number(pact?.max ?? pact?.value) > 0) out.push({key: 'pact', level: Number(pact.level) || 1, value: Number(pact.value), max: Number(pact.max ?? pact.value)});
+  for (let level = 1; level <= 9; level++) {
+    const slot = spells[`spell${level}`];
+    if (Number(slot?.value) > 0) out.push({key: `spell${level}`, level, value: Number(slot.value), max: Number(slot.max ?? slot.value)});
+  }
+  return out;
+}
 
 export function slotSnapshot(actor) {
   const spells = actor?.system?.spells ?? {};

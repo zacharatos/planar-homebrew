@@ -42,7 +42,7 @@ await import("../scripts/main.mjs");
 
 test("registers settings, menus and the GM query on init", () => {
   hooks.once.init();
-  for (const k of ["deathSavesEnabled", "deathSavesAuto", "deathSavesNPCs", "textLanguage", "debug", "language"]) assert.ok(registered.settings.includes(`planar-homebrew.${k}`), k);
+  for (const k of ["deathSavesEnabled", "deathSavesAuto", "deathSavesNPCs", "textLanguage", "debug", "language", "companionApproval"]) assert.ok(registered.settings.includes(`planar-homebrew.${k}`), k);
   assert.deepEqual(registered.menus, ["manager", "companionStatus", "lightController"]);
   assert.equal(typeof CONFIG.queries["planar-homebrew.companionRequest"], "function");
   assert.equal(settings.get("textLanguage"), "el", "chat is Greek by default at our table");
@@ -51,10 +51,10 @@ test("registers settings, menus and the GM query on init", () => {
 test("exposes the api on game.modules and the old global on ready", () => {
   hooks.once.ready();
   const api = game.modules.get("planar-homebrew").api;
-  for (const fn of ["open", "openManager", "openStatus", "openLights", "performCompanionAction", "calculateResonance", "togglePortableLight", "rollBlindDeathSave", "addPrivateDeathFailure"]) assert.equal(typeof api[fn], "function", fn);
+  for (const fn of ["open", "openManager", "openStatus", "openLights", "performCompanionAction", "calculateResonance", "togglePortableLight", "rollBlindDeathSave", "addPrivateDeathFailure", "applyTokenLight", "switchLights"]) assert.equal(typeof api[fn], "function", fn);
   assert.equal(game.planarHomebrew, api);
   assert.equal(api.registry.list().length, 4);
-  for (const hook of ["dnd5e.rollDamage", "dnd5e.preRollDeathSave", "preUpdateActor", "updateCombat", "dnd5e.postUseActivity", "updateWorldTime", "deleteToken"]) assert.ok(hooks.on[hook]?.length, hook);
+  for (const hook of ["dnd5e.rollDamage", "dnd5e.preRollDeathSave", "preUpdateActor", "updateCombat", "dnd5e.postUseActivity", "updateWorldTime", "deleteToken", "dnd5e.preRollDamage", "renderTokenHUD", "controlToken", "updateAmbientLight"]) assert.ok(hooks.on[hook]?.length, hook);
 });
 
 test("token controls: manager for the GM only, lights for everyone", () => {

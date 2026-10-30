@@ -1,8 +1,9 @@
-import {lightManagementHTML,handleLightManagerAction} from './light-ui.mjs';
-import {ID,DEFAULT_RESONANCE,DEFAULT_VESTIGE} from '../core/constants.mjs';
+import {lightManagementHTML,handleLightManagerAction,tokenPresetOptions} from './light-ui.mjs';
+import {ID,DEFAULT_RESONANCE} from '../core/constants.mjs';
 import {t,fail,language,toggleLanguage} from '../i18n.mjs';
 import {assignResonance,unassignResonance} from '../rules/resonance.mjs';
-import {bindVestige,unbindVestige,inspectVestige,performCompanionAction,suggestCompanionPosition,repairCompanionState} from '../rules/vestige.mjs';
+import {bindVestige,unbindVestige,inspectVestige,performCompanionAction,repairCompanionState,companionConfig} from '../rules/vestige.mjs';
+import {applyTokenLight,tokenPreset} from '../rules/token-lights.mjs';
 import {configureBlindDeathSave,getPrivateDeathState,rollBlindDeathSave,resetBlindDeathSave,clearVisibleDeathCounters,addPrivateDeathFailure,SKIP} from '../rules/death-saves.mjs';
 
 const DialogV2 = () => foundry.applications.api.DialogV2;
@@ -49,18 +50,24 @@ async function configureWeapon(actor,item,refresh){
     ${field(t('Resonance.Activity'),`<select name="activityId">${activityOptions(item,prev.activityId)}</select>`)}
     ${field(t('Label.DieFaces'),`<input type="number" name="faces" min="2" max="100" value="${safe(prev.faces)}">`)}
     ${field(t('Label.MaxExtra'),`<input type="number" name="maxExtra" min="1" max="1000" value="${safe(prev.maxExtra)}">`)}
+    ${field(t('Resonance.Mode'),`<select name="mode">${['inline','separate'].map(k=>option(k,t(`Resonance.ModeOption.${k}`),prev.mode===k)).join('')}</select>`)}
     ${field(t('Resonance.DamageType'),`<select name="damageType">${['slashing','piercing','bludgeoning'].map(k=>option(k,damageLabel(k),prev.damageType===k)).join('')}</select>`)}
   `);
   if(!fd)return;
-  await assignResonance(item,{enabled:get(fd,'enabled')==='true',activityId:get(fd,'activityId'),faces:get(fd,'faces'),maxExtra:get(fd,'maxExtra'),damageType:get(fd,'damageType')});
+  await assignResonance(item,{enabled:get(fd,'enabled')==='true',activityId:get(fd,'activityId'),faces:get(fd,'faces'),maxExtra:get(fd,'maxExtra'),damageType:get(fd,'damageType'),mode:get(fd,'mode')});
   ui.notifications.info(t('Resonance.Saved',{actor:actor.name,item:item.name}));
   await refresh();
 }
+/** Actors that look like a companion for this hero: NPCs first, then names with vestige/familiar, then the rest. */
+function companionCandidates(summoner){
+  const score=a=>(a.type==='npc'?0:2)+(/vestige|familiar|απομειν|σύντροφ|wyrm/i.test(a.name)?0:1);
+  return worldActors().filter(a=>a.id!==summoner.id).sort((a,b)=>score(a)-score(b)||a.name.localeCompare(b.name));
+}
 async function configureBinding(summoner,refresh){
   if(!game.user.isGM)throw fail('Err.GMOnly');
-  const actors=worldActors().filter(a=>a.id!==summoner.id);
+  const actors=companionCandidates(summoner);
   if(!actors.length)throw fail('Err.NoCompanionActor');
-  const prev={...DEFAULT_VESTIGE,...(summoner.getFlag(ID,'vestige')??{})};
+  const prev=companionConfig(summoner);
   const currentId=actors.find(a=>a.uuid===prev.companionUuid)?.id;
   const spells=summoner.items.filter(i=>i.type==='spell');
   const activities=spells.flatMap(item=>[...(item.system?.activities?.values?.()??[])]
@@ -71,51 +78,41 @@ async function configureBinding(summoner,refresh){
   const fd=await promptFields(t('Companion.BindTitle',{name:summoner.name}),`
     <p>${t('Companion.BindHint')}</p>
     ${field(t('Companion.CompanionActor'),`<select name="companion">${actors.map(a=>option(a.id,a.name,a.id===currentId)).join('')}</select>`)}
+    ${field(t('Companion.Cost'),`<select name="costMode">${['slot','spell','free'].map(k=>option(k,t(`Companion.CostMode.${k}`),prev.costMode===k)).join('')}</select>`)}
+    ${field(t('Companion.HPMode'),`<select name="hpMode">${['vestige','keep'].map(k=>option(k,t(`Companion.HP.${k}`),prev.hpMode===k)).join('')}</select>`)}
+    ${field(t('Companion.Light'),`<select name="lightPreset">${option('none',t('Companion.NoLight'),prev.lightPreset==='none')}${tokenPresetOptions(prev.lightPreset)}</select>`)}
+    ${field(t('Companion.Share'),yesNo('grantOwnership',prev.grantOwnership,'Common.Yes','Common.No'))}
+    <details class="planar-more"><summary>${t('Companion.More')}</summary>
+    ${field(t('Companion.Spell'),`<select name="casting">${option('',t('Companion.SpellNone'),!castingKey)}${activities.map(a=>option(a.key,a.label,a.key===castingKey)).join('')}</select>`)}
     ${field(t('Common.Status'),yesNo('enabled',prev.enabled))}
     ${field(t('Label.Range'),`<input name="range" type="number" min="5" max="500" value="${safe(prev.range)}">`)}
-    ${field(t('Companion.Cost'),`<select name="requireCasting">${option('true',t('Companion.CostSpell'),prev.requireCasting)}${option('false',t('Companion.CostFree'),!prev.requireCasting)}</select>`)}
-    ${field(t('Companion.Spell'),`<select name="casting">${option('',t('Companion.SpellNone'),!castingKey)}${activities.map(a=>option(a.key,a.label,a.key===castingKey)).join('')}</select>`)}
     ${field(t('Companion.CommandCost'),`<select name="commandCost">${['bonus','action','free'].map(k=>option(k,t(`Cost.${k}`),prev.commandCost===k)).join('')}</select>`)}
     ${field(t('Companion.RecallReturn'),`<select name="requireOutsideCombatRecall">${option('true',t('Companion.OutsideCombat'),prev.requireOutsideCombatRecall)}${option('false',t('Companion.InCombatToo'),!prev.requireOutsideCombatRecall)}</select>`)}
     ${field(t('Companion.PlayerControls'),`<select name="allowPlayerControls">${option('true',t('Companion.PlayerControlsOn'),prev.allowPlayerControls)}${option('false',t('Companion.GMOnly'),!prev.allowPlayerControls)}</select>`)}
-    ${field(t('Companion.HPMode'),`<select name="hpMode">${['keep','vestige'].map(k=>option(k,t(`Companion.HP.${k}`),prev.hpMode===k)).join('')}</select>`)}
     ${field(t('Companion.Vanish'),`<select name="vanishOnDeath">${option('true',t('Common.Yes'),prev.vanishOnDeath)}${option('false',t('Common.No'),!prev.vanishOnDeath)}</select>`)}
-    ${field(t('Companion.Light'),`<select name="lightPreset">${['none','aura','beacon'].map(k=>option(k,t(`Companion.LightPreset.${k}`),prev.lightPreset===k)).join('')}</select>`)}
+    </details>
   `);
   if(!fd)return;
   const casting=activities.find(a=>a.key===get(fd,'casting'));
-  if(get(fd,'requireCasting')==='true'&&!casting)throw fail('Err.ChooseSpell');
+  const costMode=String(get(fd,'costMode'));
+  if(costMode==='spell'&&!casting)throw fail('Err.ChooseSpell');
   const companion=game.actors.get(String(get(fd,'companion')));
   await bindVestige(summoner,companion,{
-    range:get(fd,'range'), enabled:get(fd,'enabled')==='true',
-    requireCasting:get(fd,'requireCasting')==='true',
+    range:get(fd,'range'), enabled:get(fd,'enabled')==='true',costMode,
     castingItemUuid:casting?.item.uuid??'',castingActivityId:casting?.activity.id??'',
     lightPreset:get(fd,'lightPreset'),commandCost:get(fd,'commandCost'),
     requireOutsideCombatRecall:get(fd,'requireOutsideCombatRecall')==='true',
     allowPlayerControls:get(fd,'allowPlayerControls')==='true',
-    hpMode:get(fd,'hpMode'),vanishOnDeath:get(fd,'vanishOnDeath')==='true'
+    hpMode:get(fd,'hpMode'),vanishOnDeath:get(fd,'vanishOnDeath')==='true',
+    grantOwnership:get(fd,'grantOwnership')==='true'
   });
   ui.notifications.info(t('Companion.Bound',{companion:companion.name,summoner:summoner.name}));
   await refresh();
 }
 async function confirmAction(message){return Boolean(await DialogV2().confirm({content:`<p>${safe(message)}</p>`,rejectClose:false,modal:true}));}
-async function choosePlacement(summoner){
-  const suggested=suggestCompanionPosition(summoner);
-  const fd=await promptFields(t('Companion.PlaceTitle',{name:summoner.name}),`
-    <p>${t('Companion.PlaceHint')}</p>
-    ${field('X',`<input name="x" type="number" step="1" value="${safe(suggested.x)}">`)}
-    ${field('Y',`<input name="y" type="number" step="1" value="${safe(suggested.y)}">`)}
-  `);
-  if(!fd)return null;
-  return {x:Number(get(fd,'x')),y:Number(get(fd,'y'))};
-}
 export async function perform(action,summoner,refresh){
   let result;
-  if(['manifest','return'].includes(action)){
-    const point=await choosePlacement(summoner);
-    if(!point)return;
-    result=await performCompanionAction(summoner,action,{point});
-  }else if(action==='repair-companion'){
+  if(action==='repair-companion'){
     result=await repairCompanionState(summoner);
   }else if(action==='unbind'){
     if(!await confirmAction(t('Companion.ConfirmUnbind')))return;
@@ -124,7 +121,7 @@ export async function perform(action,summoner,refresh){
     if(['destroy','dismiss'].includes(action)&&!await confirmAction(t(`Companion.Confirm.${action}`)))return;
     result=await performCompanionAction(summoner,action);
   }
-  ui.notifications.info(result);
+  if(result)ui.notifications.info(result);
   await refresh();
 }
 const button=(action,key,uuid='',data)=>`<button type="button" data-planar-action="${safe(action)}" data-uuid="${safe(uuid)}">${safe(t(key,data))}</button>`;
@@ -250,31 +247,62 @@ export class PlanarHomebrewManager extends foundry.applications.api.ApplicationV
     }));
   }
 }
+/**
+ * Bound companions, for players (their heroes) and the GM (every hero): manifest, return, recall, dismiss,
+ * command; the companion's light; its sheet and its actions (Vestige's Strike and the rest) as buttons.
+ */
 export class PlanarCompanionStatus extends foundry.applications.api.ApplicationV2 {
-  static DEFAULT_OPTIONS={id:'planar-homebrew-player-status',window:{title:'PLANAR_HOMEBREW.Companion.ControllerTitle',resizable:true},position:{width:720,height:450}};
+  static DEFAULT_OPTIONS={id:'planar-homebrew-player-status',window:{title:'PLANAR_HOMEBREW.Companion.ControllerTitle',resizable:true},position:{width:640,height:520}};
   get title(){return t('Companion.ControllerTitle');}
   async _renderHTML(){
-    const root=document.createElement('div');root.className='planar-manager';
-    const owned=worldActors().filter(a=>a.testUserPermission(game.user,'OWNER')&&a.getFlag(ID,'vestige')?.companionUuid);
-    const rows=[];
-    for(const actor of owned){
+    const root=document.createElement('div');root.className='planar-manager planar-companions';
+    const heroes=worldActors().filter(a=>a.getFlag(ID,'vestige')?.companionUuid&&(game.user.isGM||a.testUserPermission(game.user,'OWNER')));
+    const cards=[];
+    for(const actor of heroes){
       const {config,companion,tokens,errors}=await inspectVestige(actor),state=config.state;
-      const actions=config.enabled&&config.allowPlayerControls ? `
-        ${['dismissed','destroyed'].includes(state)?button('manifest','Companion.Action.manifest',actor.uuid):''}
-        ${state==='dormant'?button('return','Companion.Action.returnFree',actor.uuid)+button('dismiss','Companion.Action.dismiss',actor.uuid):''}
-        ${state==='manifested'?button('command','Companion.Action.command',actor.uuid)+button('recall','Companion.Action.recall',actor.uuid)+button('dismiss','Companion.Action.dismiss',actor.uuid):''}`:`<em>${safe(t('Companion.GMControls'))}</em>`;
-      rows.push(`<tr><td>${safe(actor.name)}</td><td>${safe(companion?.name??t('Companion.MissingActor'))}</td><td>${safe(stateLabel(state))}</td><td>${safe(companion?.system?.attributes?.hp?.value??'?')} / ${safe(companion?.system?.attributes?.hp?.max??'?')}</td><td>${safe(tokens[0]?.scene?.name??'—')}</td><td>${errors.length?safe(errors.join('; ')):actions}</td></tr>`);
+      const can=game.user.isGM||(config.enabled&&config.allowPlayerControls);
+      const actions=!can?`<em>${safe(t('Companion.GMControls'))}</em>`:[
+        ['dismissed','destroyed'].includes(state)?button('manifest','Companion.Action.manifest',actor.uuid):'',
+        state==='dormant'?button('return','Companion.Action.returnFree',actor.uuid)+button('dismiss','Companion.Action.dismiss',actor.uuid):'',
+        state==='manifested'?button('command','Companion.Action.command',actor.uuid)+button('recall','Companion.Action.recall',actor.uuid)+button('dismiss','Companion.Action.dismiss',actor.uuid):''
+      ].join('');
+      const token=tokens[0]?.token;
+      const lightRow=token&&(game.user.isGM||token.isOwner)?`<div class="planar-inline">${safe(t('Companion.Light'))}: <select data-companion-light="${safe(token.uuid)}">${tokenPresetOptions(tokenPreset(token)||'')}</select> <button type="button" data-companion-light-apply="${safe(token.uuid)}">${safe(t('TokenLight.Apply'))}</button></div>`:'';
+      const canSee=companion?.testUserPermission?.(game.user,'OBSERVER');
+      const abilities=state==='manifested'&&companion?.isOwner?[...companion.items].filter(i=>['weapon','feat','spell'].includes(i.type)&&(i.system?.activities?.size??0)>0)
+        .map(i=>`<button type="button" class="planar-ability" data-companion-use="${safe(i.uuid)}" title="${safe(i.name)}"><img src="${safe(i.img)}" alt=""> ${safe(i.name)}</button>`).join(''):'';
+      const hp=companion?.system?.attributes?.hp;
+      cards.push(`<article class="planar-card">
+        <header><img src="${safe(companion?.img??actor.img)}" alt=""><div><h3>${safe(companion?.name??t('Companion.MissingActor'))}</h3>
+          <p>${safe(actor.name)} · ${safe(stateLabel(state))}${hp?` · HP ${safe(hp.value)}/${safe(hp.max)}`:''}${tokens[0]?` · ${safe(tokens[0].scene.name)}`:''}</p>
+          <p class="hint">${safe(t(`Companion.CostMode.${config.costMode}`))}</p></div></header>
+        ${errors.length?`<p class="planar-warn">⚠ ${safe(errors.join('; '))}</p>`:''}
+        <div class="planar-actions">${actions}${canSee?`<button type="button" data-companion-sheet="${safe(companion.uuid)}">${safe(t('Companion.Sheet'))}</button>`:''}${game.user.isGM&&errors.length?button('repair-companion','Common.Repair',actor.uuid):''}</div>
+        ${lightRow}
+        ${abilities?`<div class="planar-abilities"><strong>${safe(t('Companion.Abilities'))}</strong> ${abilities}</div>`:''}
+      </article>`);
     }
-    root.innerHTML=`<header class="planar-head"><div><h2>${t('Companion.ControllerTitle')}</h2><p>${t('Companion.ControllerIntro')}</p></div>${languageButton()}</header><table><thead><tr><th>${t('Companion.Summoner')}</th><th>${t('Companion.Companion')}</th><th>${t('Common.Status')}</th><th>HP</th><th>${t('Common.Scene')}</th><th>${t('Common.Actions')}</th></tr></thead><tbody>${rows.join('')||`<tr><td colspan="6">${safe(t('Companion.NoneOwned'))}</td></tr>`}</tbody></table><p class="notes">${t('Companion.ControllerNotes')}</p>`;
+    root.innerHTML=`<header class="planar-head"><div><h2>${t('Companion.ControllerTitle')}</h2><p>${t('Companion.ControllerIntro')}</p></div>${languageButton()}</header>${cards.join('')||`<p>${safe(t('Companion.NoneOwned'))}</p>`}<p class="notes">${t('Companion.ControllerNotes')}</p>`;
     return root;
   }
   _replaceHTML(result,content){content.replaceChildren(result);}
   _onRender(context,options){
     super._onRender(context,options);
     bindLanguageButton(this.element);
-    this.element.querySelectorAll('button[data-planar-action]').forEach(el=>el.addEventListener('click',async()=>{
-      try{const actor=await fromUuid(el.dataset.uuid);if(actor)await perform(el.dataset.planarAction,actor,()=>this.render());}
-      catch(e){notify(e);}
-    }));
+    const busy=async(el,fn)=>{el.disabled=true;try{await fn();}catch(e){notify(e);}finally{el.disabled=false;}};
+    this.element.querySelectorAll('button[data-planar-action]').forEach(el=>el.addEventListener('click',()=>busy(el,async()=>{
+      const actor=await fromUuid(el.dataset.uuid);if(actor)await perform(el.dataset.planarAction,actor,()=>this.render());
+    })));
+    this.element.querySelectorAll('[data-companion-sheet]').forEach(el=>el.addEventListener('click',async()=>{(await fromUuid(el.dataset.companionSheet))?.sheet?.render(true);}));
+    this.element.querySelectorAll('[data-companion-use]').forEach(el=>el.addEventListener('click',()=>busy(el,async()=>{
+      const item=await fromUuid(el.dataset.companionUse);if(!item)throw fail('Err.ItemGone');
+      await item.use();
+    })));
+    this.element.querySelectorAll('[data-companion-light-apply]').forEach(el=>el.addEventListener('click',()=>busy(el,async()=>{
+      const uuid=el.dataset.companionLightApply;
+      const select=this.element.querySelector(`[data-companion-light="${CSS.escape(uuid)}"]`);
+      ui.notifications.info(await applyTokenLight(await fromUuid(uuid),select?.value??'aura'));
+      await this.render();
+    })));
   }
 }

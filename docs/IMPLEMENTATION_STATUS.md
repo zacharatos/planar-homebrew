@@ -4,9 +4,9 @@
 
 **Silver Eagle Resonance:** assigned to weapon and optional Attack activity; pure roll calculations and guarded native `dnd5e.rollDamage` integration; custom critical handling for supported roll shapes; chat breakdown; Graze-only suppression. This was completed in v0.3.0 and remains **live unverified**.
 
-**Bound Companion:** GM can assign any existing world companion Actor to any world summoner Actor, configure an existing spell Item and Activity, cast a spell through that native D&D 5e Activity, verify exactly one slot decrease, and create a linked token after a successfully authorized cast. Alternative no-cost companion binding also works. GM and player controllers include Manifest, Recall, Return, Dismiss, Status, and Command (Destroy is GM-only). Companion HP and resources persist on the original world Actor. Supports configured light, range, scene bounds and occupied-position validation, per-round command record, and combat initiative after summoner when possible. State is stored on the summoner Actor.
+**Bound Companion (0.8.0):** GM binds any existing world companion Actor to any world summoner Actor in one dialog (a companion already on the map is adopted; the hero's players can be given OWNER). Manifest is paid on the caller's client: one spell slot the player picks (module lowers it, refunds if placement fails), a native spell Activity (warns if no slot change is seen), or free. The token is placed on the nearest free square next to the hero by the GM's client, with the binding's token light. Companion window: Manifest, Recall, Return, Dismiss, Command (Destroy is GM-only), the companion's sheet, its item actions as buttons, its token light. HP and resources persist on the world Actor; a new casting restores full HP.
 
-**Player security:** native Foundry owner permission check on summoner; active GM query with explicit approval for all privileged token/state operations; owner-only Command uses native Actor permissions without GM proxy; short-lived preparation reservation; GM-side resource delta verification; exact bound Actor/scene only; no arbitrary document update, no open socket proxy. GM query sender identity is not authenticated, so operations cannot be automatically GM-approved for claimed owner. The GM must actively confirm each operation.
+**Player security:** native owner check on the summoner on the caller's side; the active GM's query handler checks that the user id sent with the request owns the summoner and that the action is one of manifest/return/recall/dismiss for the bound Actor only. Foundry's query does not authenticate the sender, so a player could in principle send another user's id: acceptable at our table; the world setting `companionApproval` makes the GM confirm each request. No arbitrary document update, no open socket proxy.
 
 **Robustness:** duplicate source Actor token detection, pending operation locks, manual token deletion detection, 0 HP monitor and GM reconnection reconciliation, status errors and narrow missing-token repair.
 
@@ -19,9 +19,9 @@
 ## Limitations and unverified behavior
 
 - No running Foundry V14 + official D&D 5e 6.0.5 world was available. APIs were cross-checked against published hooks/docs but the exact live consumption and token lifecycle remain unverified.
-- Native spell use is expected to invoke `dnd5e.postActivityConsumption` and decrement exactly one `system.spells.spellN.value` or `system.spells.pact.value`. Spells with no slot expenditure, extra resource charges, or nonstandard spell-slot systems may not qualify for the paid mode. Use no-cost mode only when explicitly intended.
+- *Cast a spell* cost: the module checks the slot change only to warn; *Spend one spell slot* lowers `system.spells.pact|spellN.value` directly and is the default.
 - Native spell cast and linked-token creation are not one server transaction. Successful casting followed by failed placement cannot be automatically refunded safely. A GM must resolve such a case manually.
-- Placement is via editable grid X/Y coordinates (with nearest valid point prefilled); there is no canvas drag placement preview.
+- Placement is automatic (nearest free square within range of the hero's token); players drag the token afterwards. A `point` can be passed through the API.
 - Command is announced and tracked once per combat round; it does not automatically execute Help/Dodge/Attack actions or deduct D&D action economy resources. Independent Dodge remains a table rule.
 - GM authorization requires a connected active GM. No unsafe proxy user-id trust or broad Actor-creation permissions are used.
 - Linked token collision is basic 2D axis-aligned rectangle overlap; terrain, height, walls, line-of-sight, difficult terrain, and gridless/special grids are not modeled.

@@ -199,29 +199,90 @@ export function injectResonance(rolls, config, {
   }
 }
 
+/** The first two active faces of the weapon's base pool (2dN, or the first two of a 4dN critical pool). */
+export function baseDiceFromRolls(rolls, faces=6, damageType='') {
+  for (const roll of rolls ?? []) {
+    const type = roll?.options?.type ?? roll?.options?.damageType;
+    if (damageType && type && type !== damageType) continue;
+    for (const die of roll?.dice ?? roll?.terms ?? []) {
+    if (Number(die?.faces) !== faces || ![2,4].includes(Number(die?.number))) continue;
+    const values = activeResults(die).map(r => Number(r.result)).slice(0,2);
+    if (values.length === 2 && values.every(Number.isFinite)) return values;
+  }}
+  return null;
+}
+
+/**
+ * The tested macro's way (Silver Eagle Great Sword macro, Foundry 14 / dnd5e 6.0.x): when the two base
+ * dice match, roll `1dN x=value` (Foundry's exploding die: every result equal to the value rolls again,
+ * and the last, different die counts too) as its own native damage card, labelled with the damage type.
+ */
+export async function rollSeparateChain(item, activity, values, config, data) {
+  const [first, second] = values;
+  if (first !== second) return null;
+  const formula = `1d${config.faces}x=${first}`;
+  const actor = item.parent;
+  const speaker = ChatMessage.getSpeaker({actor});
+  const flavor = t('Chat.ResonanceSeparate', {item: item.name, first, second});
+  try {
+    const rolls = await CONFIG.Dice.DamageRoll.build(
+      {rolls: [{parts: [formula], data: {}, options: {type: config.damageType, types: [config.damageType], properties: Array.from(item.system?.properties ?? [])}}]},
+      {configure: false},
+      {create: true, data: {type: 'damage', flavor, speaker, system: {...(data?.subject?.messageSources ?? activity?.messageSources ?? {})}}}
+    );
+    return rolls.reduce((sum, r) => sum + Number(r.total ?? 0), 0);
+  } catch (err) {
+    console.warn(`${ID}: native bonus damage card failed, falling back to a plain roll`, err);
+    const roll = await new Roll(`${formula}[${config.damageType}]`).evaluate();
+    await roll.toMessage({speaker, flavor});
+    return roll.total;
+  }
+}
+
 export function registerResonanceAutomation(record) {
-  Hooks.on('dnd5e.rollDamage', (rolls, data) => {
-    // Internal Roll caches were checked on Foundry 14 + dnd5e 6.0.x only; elsewhere leave the roll alone.
-    if (game.release?.generation !== 14 || !isSupportedSystemVersion(game.system?.version)) return;
-    const activity = data?.subject;
-    if (activity?.type !== 'attack') return;
+  const subjectOf = data => data?.subject;
+  const configFor = activity => activity?.type === 'attack' ? assignmentFor(activity.item, activity.id) : null;
+
+  // 'separate' mode: this attack's own dice aren't doubled on a critical hit (as the macro did).
+  Hooks.on('dnd5e.preRollDamage', (config) => {
+    const activity = subjectOf(config);
+    const assignment = configFor(activity);
+    if (assignment?.mode !== 'separate') return;
+    config.isCritical = false;
+    for (const part of config.rolls ?? []) { part.options ??= {}; part.options.isCritical = false; }
+  });
+
+  const separate = (activity, rolls, assignment, data, reason) => {
     const item = activity.item;
-    const config = assignmentFor(item, activity.id);
+    const values = baseDiceFromRolls(rolls, assignment.faces, assignment.damageType);
+    if (!values) { record(`Skipped ${item.name}: no 2d${assignment.faces} base dice (${reason})`); warn('Note.ResonanceSkipped', {item: item.name, status: reason}); return; }
+    if (values[0] !== values[1]) return;
+    void rollSeparateChain(item, activity, values, assignment, data)
+      .then(extra => record(`${item.name}: ${values.join('+')} matched, chain card +${extra} (${reason})`))
+      .catch(err => { record(`Resonance chain card failed on ${item.name}: ${err.message}`); console.error(`${ID}:`, err); error('Note.ResonanceFailed', {item: item.name}); });
+  };
+
+  Hooks.on('dnd5e.rollDamage', (rolls, data) => {
+    const activity = subjectOf(data);
+    const config = configFor(activity);
     if (!config) return;
+    const item = activity.item;
+    if (config.mode === 'separate') return separate(activity, rolls, config, data, 'separate');
+    // Inline: internal Roll caches were checked on Foundry 14 + dnd5e 6.0.x only; elsewhere use the separate card.
+    if (game.release?.generation !== 14 || !isSupportedSystemVersion(game.system?.version)) return separate(activity, rolls, config, data, 'untested-version');
     try {
       const result = injectResonance(rolls, config);
       if (result.status === 'applied') {
         record(`${item.name}: ${result.initial.join('+')}, chain [${result.extra.join(',')}], total ${result.newTotal}${result.critical?' (custom critical)':''}`);
         if (result.capped && game.user.isGM) warn('Note.ResonanceCap',{item:item.name});
-      } else if (result.status !== 'already-processed') {
-        record(`Skipped ${item.name}: ${result.status}${result.error ? ` (${result.error.message})` : ''}`);
-        if (result.status !== 'disabled')
-          warn('Note.ResonanceSkipped',{item:item.name,status:result.status});
+      } else if (!['already-processed','disabled'].includes(result.status)) {
+        record(`Inline resonance skipped on ${item.name}: ${result.status}${result.error ? ` (${result.error.message})` : ''}; using a separate chain card`);
+        separate(activity, rolls, config, data, result.status);
       }
-    } catch(error) {
-      record(`Resonance failure on ${item.name}: ${error.message}`);
-      console.error(`${ID}:`,error);
-      error('Note.ResonanceFailed',{item:item.name});
+    } catch(err) {
+      record(`Resonance failure on ${item.name}: ${err.message}`);
+      console.error(`${ID}:`,err);
+      separate(activity, rolls, config, data, 'error');
     }
   });
 

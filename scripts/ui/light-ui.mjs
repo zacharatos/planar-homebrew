@@ -1,6 +1,8 @@
 import {ID} from '../core/constants.mjs';
 import {LIGHT_PRESETS,classifyLightItem} from '../core/light-presets.mjs';
 import {t,fail,language,toggleLanguage} from '../i18n.mjs';
+import {TOKEN_LIGHT_GROUPS,LIGHT_STRENGTHS,pickTargets} from '../core/token-lights.mjs';
+import {lightableTokens,applyTokenLight,tokenPreset,sceneLightSources,sourceLit,selectedSourceIds,switchBackup,lookBackup,switchLights} from '../rules/token-lights.mjs';
 import {assignPortableLight,removePortableLight,getLightAssignment,togglePortableLight,refuelPortableLight,repairPortableLight,resetPortableLight,setHood,summarizeLight} from '../rules/light.mjs';
 
 const safe=v=>foundry.utils.escapeHTML(String(v??''));
@@ -99,11 +101,39 @@ export async function handleLightManagerAction(action,uuid,refresh){
   else if(action==='light-repair'&&item){ui.notifications.info(await repairPortableLight(item));}
   if(refresh)await refresh();
 }
+const TABS=['items','token','scene'];
+/** The preset menu, grouped: mundane lights, spells, vestige lights, none. */
+export function tokenPresetOptions(selected=''){
+  return Object.entries(TOKEN_LIGHT_GROUPS).map(([group,keys])=>`<optgroup label="${safe(t(`TokenLight.Group.${group}`))}">${keys.map(k=>option(k,t(`TokenLight.Preset.${k}`),k===selected)).join('')}</optgroup>`).join('');
+}
+/**
+ * Lights window, for everyone: carried items (torches, lamps…), token lights (any owned token, including a
+ * vestige or familiar) and, for the GM, the scene switchboard (ambient + token lights: off/on/toggle,
+ * soften/restore look). Open on a tab with options {tab, tokenId}.
+ */
 export class PlanarLightController extends foundry.applications.api.ApplicationV2 {
-  static DEFAULT_OPTIONS={id:'planar-homebrew-light-controller',window:{title:'PLANAR_HOMEBREW.Light.ControllerTitle',resizable:true},position:{width:860,height:560}};
+  static DEFAULT_OPTIONS={id:'planar-homebrew-light-controller',window:{title:'PLANAR_HOMEBREW.Light.ControllerTitle',resizable:true},position:{width:780,height:600}};
+  tab='items';
+  /** Remembered choices, so a redraw (another user's change) doesn't lose what the user picked. */
+  choice={tokenId:'',preset:'torch',strength:'gentle',action:'off',scope:'',checked:null};
   get title(){return t('Light.ControllerTitle');}
+  /** Open on a tab and/or with a token picked (Token HUD button). */
+  configure({tab,tokenId}={}){
+    if(TABS.includes(tab)&&(tab!=='scene'||game.user.isGM))this.tab=tab;
+    if(tokenId)this.choice.tokenId=tokenId;
+    return this;
+  }
   async _renderHTML(){
-    const root=document.createElement('div');root.className='planar-manager';
+    const root=document.createElement('div');root.className='planar-manager planar-lights';
+    if(this.tab==='scene'&&!game.user.isGM)this.tab='items';
+    const tabs=TABS.filter(k=>k!=='scene'||game.user.isGM).map(k=>`<button type="button" class="planar-tab ${this.tab===k?'active':''}" data-planar-tab="${k}">${safe(t(`TokenLight.Tab.${k}`))}</button>`).join('');
+    const body=this.tab==='token'?this._tokenTab():this.tab==='scene'?this._sceneTab():await this._itemsTab();
+    const langButton=`<button type="button" class="planar-lang" data-planar-lang title="${safe(t('Common.LanguageHint'))}">${language()==='el'?'EN':'ΕΛ'}</button>`;
+    root.innerHTML=`<header class="planar-head"><div><h2>${t('Light.ControllerTitle')}</h2></div>${langButton}</header>
+      <nav class="planar-tabbar">${tabs}</nav>${body}`;
+    return root;
+  }
+  async _itemsTab(){
     const rows=[];
     for(const actor of worldActors()){
       if(!actor.testUserPermission(game.user,'OWNER')&&!game.user.isGM)continue;
@@ -118,28 +148,113 @@ export class PlanarLightController extends foundry.applications.api.ApplicationV
         </td></tr>`);
       }
     }
-    const langButton=`<button type="button" class="planar-lang" data-planar-lang title="${safe(t('Common.LanguageHint'))}">${language()==='el'?'EN':'ΕΛ'}</button>`;
-    root.innerHTML=`<header class="planar-head"><div><h2>${t('Light.ControllerTitle')}</h2><p>${t('Light.ControllerIntro')}</p></div>${langButton}</header>
+    return `<p>${t('Light.ControllerIntro')}</p>
       <table><thead><tr><th>${t('Common.Actor')}</th><th>${t('Light.Item')}</th><th>${t('Light.Preset')}</th><th>${t('Light.Fuel.Title')}</th><th>${t('Common.Actions')}</th></tr></thead><tbody>${rows.join('')||`<tr><td colspan="5">${safe(t('Light.NoneOwned'))}</td></tr>`}</tbody></table>
       <p class="notes">${t('Light.ControllerNotes')}</p>`;
-    return root;
+  }
+  _tokenTab(){
+    const scene=canvas?.scene;
+    if(!scene)return `<p>${safe(t('Err.OpenScene'))}</p>`;
+    const tokens=lightableTokens(scene);
+    if(!tokens.length)return `<p>${safe(t('TokenLight.NoTokens'))}</p>`;
+    const controlled=new Set((canvas.tokens?.controlled??[]).map(tok=>tok.id));
+    const picked=tokens.find(d=>d.id===this.choice.tokenId)??tokens.find(d=>controlled.has(d.id))??tokens[0];
+    this.choice.tokenId=picked.id;
+    const lightText=doc=>{
+      if(switchBackup(doc))return t('TokenLight.SwitchedOff');
+      const preset=tokenPreset(doc);
+      const radius=`${Number(doc.light?.bright)||0}/${Number(doc.light?.dim)||0}`;
+      return Number(doc.light?.dim)>0||Number(doc.light?.bright)>0?`${preset?t(`TokenLight.Preset.${preset}`)+' · ':''}${radius}`:t('TokenLight.Dark');
+    };
+    const list=tokens.map(doc=>`<tr class="${doc.id===picked.id?'planar-picked':''}"><td>${safe(doc.name)}</td><td>${safe(lightText(doc))}</td>
+      <td class="planar-actions"><button type="button" data-token-pick="${safe(doc.id)}">${safe(t('TokenLight.Pick'))}</button><button type="button" data-token-off="${safe(doc.id)}">${safe(t('TokenLight.TurnOff'))}</button></td></tr>`).join('');
+    return `<p>${t('TokenLight.Intro')}</p>
+      <div class="planar-form planar-token-form">
+        ${field(t('TokenLight.Token'),`<select name="tokenId">${tokens.map(d=>option(d.id,d.name,d.id===picked.id)).join('')}</select>`)}
+        ${field(t('TokenLight.Source'),`<select name="preset">${tokenPresetOptions(this.choice.preset)}</select>`)}
+        ${field(t('TokenLight.Strength'),`<select name="strength">${Object.keys(LIGHT_STRENGTHS).map(k=>option(k,t(`TokenLight.StrengthLevel.${k}`),k===this.choice.strength)).join('')}</select>`)}
+        <div class="planar-buttons"><button type="button" data-token-apply><i class="fa-solid fa-lightbulb"></i> ${safe(t('TokenLight.Apply'))}</button></div>
+      </div>
+      <table><thead><tr><th>${t('TokenLight.Token')}</th><th>${t('TokenLight.Now')}</th><th>${t('Common.Actions')}</th></tr></thead><tbody>${list}</tbody></table>
+      <p class="notes">${t('TokenLight.Notes')}</p>`;
+  }
+  _sceneTab(){
+    const scene=canvas?.scene;
+    if(!scene)return `<p>${safe(t('Err.OpenScene'))}</p>`;
+    const sources=sceneLightSources(scene);
+    const selected=new Set(selectedSourceIds(sources));
+    const checked=new Set(this.choice.checked??selected);
+    const scope=this.choice.scope||(selected.size?'selected':'manual');
+    const rows=[...sources.values()].map(s=>{
+      const state=switchBackup(s.doc)?t('TokenLight.OffSaved'):t(sourceLit(s)?'TokenLight.On':'TokenLight.Off');
+      return `<label class="planar-source"><input type="checkbox" name="sourceIds" value="${safe(s.id)}" ${checked.has(s.id)?'checked':''}><span>${safe(s.label)}</span><small>${safe(state)}${lookBackup(s.doc)?' · '+safe(t('TokenLight.Softened')):''}</small></label>`;
+    }).join('');
+    return `<p>${t('TokenLight.SceneIntro',{scene:safe(scene.name)})}</p>
+      <div class="planar-form">
+        ${field(t('TokenLight.Action'),`<select name="action">${['off','on','toggle','soften','lookrestore'].map(k=>option(k,t(`TokenLight.SwitchAction.${k}`),k===this.choice.action)).join('')}</select>`)}
+        ${field(t('TokenLight.Targets'),`<select name="scope">${option('selected',t('TokenLight.Scope.selected',{count:selected.size}),scope==='selected')}${option('manual',t('TokenLight.Scope.manual'),scope==='manual')}${option('all',t('TokenLight.Scope.all'),scope==='all')}</select>`)}
+      </div>
+      <div class="planar-buttons"><button type="button" data-check="all">${safe(t('TokenLight.CheckAll'))}</button><button type="button" data-check="none">${safe(t('TokenLight.CheckNone'))}</button></div>
+      <div class="planar-sources">${rows||`<p>${safe(t('TokenLight.NoSources'))}</p>`}</div>
+      <div class="planar-buttons"><button type="button" data-scene-apply><i class="fa-solid fa-power-off"></i> ${safe(t('TokenLight.ApplyScene'))}</button></div>
+      <p class="notes">${t('TokenLight.SceneNotes')}</p>`;
   }
   _replaceHTML(result,content){content.replaceChildren(result);}
+  /** Read the form into this.choice before any redraw. */
+  _remember(){
+    const el=this.element;if(!el)return;
+    for(const key of ['tokenId','preset','strength','action','scope']){const input=el.querySelector(`[name="${key}"]`);if(input)this.choice[key]=input.value;}
+    const boxes=el.querySelectorAll('[name="sourceIds"]');
+    if(boxes.length)this.choice.checked=[...boxes].filter(b=>b.checked).map(b=>b.value);
+  }
+  async _run(el,fn){
+    el.disabled=true;
+    try{const result=await fn();if(result)ui.notifications.info(result);await this.render();}
+    catch(error){notify(error);el.disabled=false;}
+  }
   _onRender(context,options){
     super._onRender(context,options);
-    this.element.querySelector('[data-planar-lang]')?.addEventListener('click',()=>void toggleLanguage());
-    this.element.querySelectorAll('[data-light-action]').forEach(el=>el.addEventListener('click',async()=>{
-      el.disabled=true;
-      try{
-        const item=await fromUuid(el.dataset.lightUuid);
-        if(!item)throw fail('Err.ItemGone');
-        let result='';
-        if(el.dataset.lightAction==='light-toggle')result=await togglePortableLight(item);
-        if(el.dataset.lightAction==='light-refuel')result=await refuelPortableLight(item);
-        if(el.dataset.lightAction==='light-hood')result=await setHood(item,!summarizeLight(item)?.config.hoodClosed);
-        if(result)ui.notifications.info(result);
-        await this.render();
-      }catch(error){notify(error);el.disabled=false;}
+    const root=this.element;
+    root.querySelector('[data-planar-lang]')?.addEventListener('click',()=>void toggleLanguage());
+    root.querySelectorAll('[data-planar-tab]').forEach(el=>el.addEventListener('click',()=>{this._remember();this.tab=el.dataset.planarTab;this.render();}));
+    root.querySelectorAll('select,input').forEach(el=>el.addEventListener('change',()=>this._remember()));
+    // Items tab
+    root.querySelectorAll('[data-light-action]').forEach(el=>el.addEventListener('click',()=>this._run(el,async()=>{
+      const item=await fromUuid(el.dataset.lightUuid);
+      if(!item)throw fail('Err.ItemGone');
+      if(el.dataset.lightAction==='light-toggle')return togglePortableLight(item);
+      if(el.dataset.lightAction==='light-refuel')return refuelPortableLight(item);
+      if(el.dataset.lightAction==='light-hood')return setHood(item,!summarizeLight(item)?.config.hoodClosed);
+    })));
+    // Token tab
+    root.querySelectorAll('[data-token-pick]').forEach(el=>el.addEventListener('click',()=>{
+      this._remember();this.choice.tokenId=el.dataset.tokenPick;
+      canvas.tokens?.get?.(el.dataset.tokenPick)?.control?.({releaseOthers:true});
+      this.render();
+    }));
+    root.querySelectorAll('[data-token-off]').forEach(el=>el.addEventListener('click',()=>this._run(el,()=>{
+      this._remember();return applyTokenLight(canvas.scene?.tokens.get(el.dataset.tokenOff),'off');
+    })));
+    root.querySelector('[data-token-apply]')?.addEventListener('click',ev=>this._run(ev.currentTarget,()=>{
+      this._remember();
+      return applyTokenLight(canvas.scene?.tokens.get(this.choice.tokenId),this.choice.preset,{strength:this.choice.strength});
+    }));
+    // Scene tab
+    root.querySelectorAll('[data-check]').forEach(el=>el.addEventListener('click',()=>{
+      root.querySelectorAll('[name="sourceIds"]').forEach(cb=>{cb.checked=el.dataset.check==='all';});
+      const scope=root.querySelector('[name="scope"]');if(scope)scope.value='manual';
+      this._remember();
+    }));
+    root.querySelector('[data-scene-apply]')?.addEventListener('click',ev=>this._run(ev.currentTarget,async()=>{
+      this._remember();
+      const sources=sceneLightSources(canvas.scene);
+      const ids=pickTargets(this.choice.scope,{all:[...sources.keys()],selected:selectedSourceIds(sources),checked:this.choice.checked??[]});
+      if(!ids.length)throw fail('Err.NoLightsPicked');
+      if(this.choice.scope==='all'&&!await confirm(t('TokenLight.ConfirmAll',{action:t(`TokenLight.SwitchAction.${this.choice.action}`),count:ids.length,scene:canvas.scene.name})))return '';
+      const {changed,skipped,failed}=await switchLights(ids.map(id=>sources.get(id)),this.choice.action,{scope:this.choice.scope});
+      this.choice.checked=null;
+      if(failed.length)ui.notifications.error(t('TokenLight.Failed',{names:failed.slice(0,4).join(', ')}));
+      return t('TokenLight.Result',{changed,skipped,failed:failed.length});
     }));
   }
 }

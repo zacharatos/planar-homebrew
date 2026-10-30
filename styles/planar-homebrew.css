@@ -16,3 +16,28 @@
 
 .planar-manager .planar-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
 .planar-manager .planar-lang{flex:0 0 auto;width:auto;min-width:3em;font-weight:600}
+
+/* 0.8.0: tabs in the light window, token/scene light forms, companion cards, Token HUD buttons */
+.planar-manager .planar-tabbar{display:flex;gap:4px;margin:8px 0 10px;border-bottom:1px solid var(--color-border-light-primary,#888)}
+.planar-manager .planar-tabbar .planar-tab{flex:0 0 auto;border-radius:4px 4px 0 0;opacity:.75}
+.planar-manager .planar-tabbar .planar-tab.active{opacity:1;font-weight:700;border-bottom:2px solid var(--color-border-highlight,#ff6400)}
+.planar-manager .planar-buttons{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.planar-manager tr.planar-picked td{background:color-mix(in srgb,var(--color-border-highlight,#ff6400) 12%,transparent)}
+.planar-manager .planar-sources{max-height:260px;overflow-y:auto;border:1px solid var(--color-border-light-primary,#777);border-radius:5px;padding:4px}
+.planar-manager .planar-source{display:flex;align-items:center;gap:8px;padding:3px 4px}
+.planar-manager .planar-source span{flex:1;overflow-wrap:anywhere}
+.planar-manager .planar-source small{opacity:.75}
+.planar-manager .planar-card{border:1px solid var(--color-border-light-primary,#888);border-radius:6px;padding:8px 10px;margin:10px 0}
+.planar-manager .planar-card>header{display:flex;gap:10px;align-items:center}
+.planar-manager .planar-card>header img{width:48px;height:48px;object-fit:cover;border:none;border-radius:4px}
+.planar-manager .planar-card h3{margin:0}
+.planar-manager .planar-card p{margin:2px 0}
+.planar-manager .planar-card .hint{opacity:.7;font-size:.9em}
+.planar-manager .planar-warn{color:var(--color-level-warning,#c8851b)}
+.planar-manager .planar-inline{display:flex;align-items:center;gap:6px;margin-top:6px}
+.planar-manager .planar-inline select{flex:1}
+.planar-manager .planar-abilities{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.planar-manager .planar-ability{display:inline-flex;align-items:center;gap:4px}
+.planar-manager .planar-ability img{width:20px;height:20px;border:none}
+.planar-form details.planar-more{margin-top:8px}
+.planar-form details.planar-more summary{cursor:pointer;opacity:.85}

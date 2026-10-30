@@ -4,9 +4,11 @@ The homebrew rules of our *Turn of Fortune's Wheel* table, as one Foundry VTT mo
 
 <!-- screenshot: docs/images/manager.webp -->
 
-- **Silver Eagle Resonance**: when the weapon's two damage dice match, it rolls another and keeps going while they match; the weapon's own dice aren't doubled on a critical hit. Works inside the normal dnd5e damage roll.
-- **Bound Companion**: any world actor bound to a hero as a familiar or vestige. Manifest casts the hero's spell activity and checks that exactly one slot was spent; recall, free return outside combat, dismiss, command once per round, destroyed at 0 HP. Players ask, the GM approves token changes.
+- **Silver Eagle Resonance**: when the weapon's two damage dice match, it rolls another and keeps going while they match; the weapon's own dice aren't doubled on a critical hit. Inside the normal dnd5e damage roll, or as a separate exploding-die damage card (the tested macro's way, and the fallback).
+- **Bound Companion**: any world actor bound to a hero as a familiar or vestige. Manifest spends one slot the player picks (or casts a spell, or is free) and places the token next to the hero; recall, free return, dismiss, command once per round, destroyed at 0 HP. The companion window shows its actions as buttons, its sheet and its light.
 - **Portable Light Source**: torches, candles, lamps and lanterns light the holder's token with their own look, counting ignitions and burn time on Foundry's world clock; hooded lantern shutter, oil refills, new torch from the stack.
+- **Token lights and scene lights**: ready-made lights for any owned token (the vestige's Spectral Aura, *Light*, *Daylight*, Moonlit Glow…), and a GM switchboard for every light of the scene (off / on / toggle, soften / restore look). From the *Player & GM Light Controller* macro.
+- **Token HUD**: right-click a token for a light button and, on a hero with a companion, a companion button.
 - **Blind Death Saves**: the GM rolls death saves in secret (automatically at a downed hero's turn), the tally lives in a GM-only journal, only the end is announced. A death is handed to **Planar Glitch**, which can't see secret failures by itself.
 - Greek and English, per user (EN/ΕΛ button in every window); chat lines everyone reads use the world's chat language (Greek by default).
 
@@ -22,7 +24,7 @@ Updates come from the same screen when a new release is tagged. Needs Foundry V1
 
 **Where to find it:** three buttons in the **Token controls** of the scene toolbar: *Planar Homebrew* (GM manager), *Portable lights* (everyone) and *Bound companions* (players who own a hero with a companion, and the GM). The same windows are under **Game Settings → Configure Settings → Planar Homebrew**.
 
-> **Test in a copy of the world first.** Every rule is covered by tests against mocked Foundry documents, but none has been played in a live V14 world yet. See [Implementation status](docs/IMPLEMENTATION_STATUS.md) and the manual checklist in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+> **Test in a copy of the world first.** Every rule is covered by tests against mocked Foundry documents. 0.7.0 was tried on our live V14 server (2026-10-30); 0.8.0 fixes what failed there (companion actions, lights for tokens other than carried items) and brings in the tested light and sword macros, but has not been played live yet. See [Implementation status](docs/IMPLEMENTATION_STATUS.md) and the manual checklist in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ## Configure Lothrik's Silver Eagle Greatsword
 
@@ -31,7 +33,7 @@ Updates come from the same screen when a new release is tagged. Needs Foundry V1
 3. Select **Lothrik Seraphion** (or your world Actor with the desired sword), then select the **Silver Eagle Greatsword** Item.
 4. Set **Enabled** to `Enabled`.
 5. Under **Attack Activity**, select the sword's specific Attack Activity. The option **All Attack Activities (this weapon only)** can be used if you prefer.
-6. Set **Dice faces** to `6`, **Max chaining dice** to `100`, **Damage type** to `Slashing`.
+6. Set **Dice faces** to `6`, **Max chaining dice** to `100`, **Damage type** to `Slashing`, and **How the chain is rolled**: *Inside the weapon's damage roll* (one card with the total) or *Separate damage card* (the tested *Silver Eagle Great Sword* macro: the sword's crit doubling is switched off for that attack and matching dice post a second damage card rolling `1d6x=N`; apply both cards). If the inline way can't handle a roll, the separate card is rolled instead.
 7. Click **Save**. The flag is stored on *that one owned weapon*, `flags.planar-homebrew.resonance`. Two items with the same name do not share a rule unless both are assigned.
 8. Make a test attack through the sword's **normal D&D 5e Attack Activity** and use the standard **Roll Damage** button. No separate macro or button is required.
 
@@ -59,43 +61,30 @@ Repeat **Give resonance to a weapon** with a different character, weapon Item, a
 
 ## Bound Companion — familiar, vestige, construct or other world Actor
 
-This is **the same Planar Homebrew module**, not a second package. You can bind **any existing world Actor** to another world Actor. There is no character-name check, new Actor creation, or required macro.
+This is **the same Planar Homebrew module**, not a second package. You can bind **any existing world Actor** to another world Actor (saved as Actor UUIDs, so names don't matter).
 
-### Configure Marigia's spectral wyrmling (or any other companion)
+### Bind Marigia's vestige (or any other companion)
 
-> **At our table (house rule):** Marigia's *Unseen Servant* is renamed **Manifest Vestige**. Casting it spends a slot and brings out the vestige with the Arcana Unleashed *Vestige Companion* stats; it stays until it drops to 0 HP or she dismisses it. Bind it with **Spell and Activity = Manifest Vestige**, **Hit points = Vestige Companion** (4 + 4 × Warlock level, full on every casting), **Vanishes when the hero dies = Yes** and **Command costs = Bonus Action** (AU: otherwise it only takes the Dodge action).
+> **At our table (house rule):** Marigia's *Unseen Servant* is renamed **Manifest Vestige**. Casting it spends a slot and brings out the vestige with the Arcana Unleashed *Vestige Companion* stats; it stays until it drops to 0 HP or she dismisses it. The defaults below are exactly that rule.
 
-1. Create or reuse the companion as its own **world Actor** (Actors directory). Set the appropriate player to **OWNER** in its ownership settings. This lets them move the companion and use its normal actions without globally allowing Actor creation.
-2. In Foundry, open **Game Settings → Configure Settings → Module Settings → Planar Homebrew Manager → Open the manager**.
-3. Under **Companions**, choose **Bind a companion**. Choose the summoner (for example, Marigia) and the companion (for example, her spectral wyrmling). Avoid any name-dependent setup: it is saved as Actor UUIDs.
-4. Set **Manifest range** (default 60 ft), **Spectral light** (`No Light`, `Violet aura`, or `Beacon`), **Command cost** (Bonus Action by default), **Recall / Return** (outside combat by default), and **Player controls**.
-5. For a normal spell-slot-cost summon, select **Activation cost → Cast assigned spell; native slot consumption**. Under **Spell and Activity**, select an *existing spell Item and one of its Activities* on the summoner. For a homebrew *Unseen Servant*, create a simple **Utility Activity** on that spell that consumes a spell slot through the normal D&D 5e workflow. **Do not assign the spell's native Summon Activity** because that would create an additional token alongside this module's linked token.
-6. For a familiar that can manifest **without paying a spell slot**, select **No spell slot required** and leave Spell and Activity as None. This is a deliberate GM-configured rule, not an automatic exception to casting.
-7. Save. The binding flag is on the summoner Actor, `flags.planar-homebrew.vestige`. Its state and existing companion Actor UUID persist across browser refreshes and Foundry restarts.
+1. Create the companion as its own **world Actor** (Actors directory). It can already be on the map: its token is adopted.
+2. **Planar Homebrew Manager → Companions → Bind a companion**, choose the hero (Marigia).
+3. One dialog: **Companion actor**, **Cost to manifest** (*Spend one spell slot*, default), **Hit points** (*Vestige Companion: 4 + 4 × Warlock level*, default), **Light** (*Spectral Aura*, default; any token light), **The hero's players own the companion** (Yes: they can move it and use its actions). Range, command cost, recall in combat, player controls, vanish on death and a spell to cast are under *More options*.
+4. Save.
 
-**Upgrading from 0.3.0:** Pre-existing bindings do not have a selected spell/Activity. Before using Manifest, open the binding's **Edit** button and select the spell/Activity, then save. Old stored states are not automatically converted into free casting.
+### Using it (player or GM)
 
-### Player controls
+Open **Bound companions** from the Token controls, or right-click the hero's (or the companion's) token → the dragon button. Each companion is a card:
 
-1. Open **Game Settings → Configure Settings → Module Settings → Bound companions → Open the companion window** (the resulting window is the **Planar Companion Controller**).
-2. Select **Manifest** to create the companion for the first time, or after Dismiss/Destroyed. The window proposes an unoccupied grid position. Enter the Scene's X/Y pixel coordinates to choose another position; the module validates the selected range, scene boundaries, and occupied space.
-3. With native spell-slot casting enabled, the module requests **explicit approval from the connected GM before casting**. Then it runs the configured D&D 5e spell Activity. It checks the native `dnd5e.postActivityConsumption` event and confirms that exactly **one** spell/pact slot decreased. Only after success is the **linked token** created from the existing world Actor. **No direct spell-slot updates are performed by this module.**
-4. **Recall** removes the token and preserves the world Actor's HP/resources. The companion becomes **Dormant**.
-5. **Return (free)** recreates the linked token from Dormant without another cast; Recall/Return are outside combat by default. This is also the intended scene-travel workflow.
-6. **Dismiss** ends the current manifestation. A new cast is required. **Destroyed** is set automatically when HP reaches zero while a GM is active (or reconciled when the GM next connects); a new cast restores HP to max.
-7. **Command** announces the order in chat and records a once-per-round use in an active combat. The summoner's configured command cost is displayed. Companion Actions (Help, attacks, etc.) are used normally from its own sheet; the module **does not automatically spend D&D 5e bonus actions or take the companion's actions**. Without a command, its default action is Dodge by campaign rule; the module does not apply an Active Effect for Dodge.
+- **Manifest**: pick a slot (Pact Magic first); the module spends it and the companion appears on the nearest free square next to the hero, with its light, at full HP. Drag it where you want. If placing fails, the slot is given back.
+- **Recall** removes the token and keeps its HP (*dormant*); **Return** brings it back for free. By default both are outside combat only (binding option).
+- **Dismiss** ends it; the next Manifest needs a new slot. At **0 HP** it is destroyed automatically (GM connected). If the hero dies it vanishes (option, on by default).
+- **Command** announces the order in chat and is tracked once per round in combat. Without a command it takes the Dodge action (campaign rule; not automated).
+- While it's out: its **actions as buttons** (Vestige's Strike, other weapons, features, spells, rolled through dnd5e as usual), its **Sheet**, and a **light** menu for its token.
 
-The GM can perform Manifest/Return/Recall/Dismiss/Destroy/Command from the Manager. The player controller shows their owned summoners, companions, status, HP, scene, and appropriate buttons. The **Command** action can be used directly by the summoner owner without involving the GM, because it only records a flag and posts a chat announcement. **Owners of the companion Actor retain their normal sheet and token permissions.**
+**Cost options:** *Spend one spell slot* (the module lowers the slot; no spell item needed), *Cast a spell from the sheet* (runs the chosen spell activity on the sheet; use a Utility activity, not a Summon one, or you'd get a second token; if no slot change is seen it warns), *Free*. Bindings made before 0.8.0 keep their behaviour.
 
-### Authorization and safe-failure behavior
-
-Foundry V14's targeted query mechanism does not provide the GM query handler with an authenticated sender identity. For this reason **every player-requested privileged token/state action requires explicit GM approval**. The GM is shown the configured summoner and companion; no arbitrary UUIDs or arbitrary document-update payloads are accepted. For a spell cast, the GM preauthorizes a specific Scene and position and stores a short-lived, single-use reservation plus the summoner's spell-slot snapshot. After native casting, the GM verifies the slot decrease again before creating the token. No connected GM means no player-initiated Manifest/Recall/Return in this version.
-
-The caller's view and the GM's scene need not match, since the approved Scene ID and coordinates are transferred with the request. Companion ownership is **not granted automatically**: set the player's OWNER permission on the world companion Actor. The module refuses to duplicate an already placed linked companion and blocks companion reassignment while a token exists. It records GM diagnostics for incorrect state and missing Actors/tokens, and includes a limited **Repair** operation for a manifested companion whose token was manually deleted.
-
-**Nontransactional limitation:** Native D&D 5e spell consumption and Foundry token creation are separate operations. The module validates placement **before** casting and prevents repeat requests, but if token placement or GM connectivity fails **after** a valid spell has already been consumed, it cannot safely roll back the slot using a public D&D 5e API. The token will not be created, and the GM must inspect or correct the resource manually. Never press Manifest repeatedly after this error.
-
-**Live compatibility warning:** The Foundry V14 + D&D 5e 6.0.5 Activity return values, exact update hooks, query dialogs, linked token data, and initiative behavior have **not** been exercised in a real Foundry world. Test in a copied world first, with no other summoning automation modules. The casting check is deliberately strict: if consumption cannot be verified, no token is placed.
+**Who does what:** token changes run on the active GM's client. A player's request names the player, and the GM's client checks that this player owns the hero; by default it then just happens, because binding the companion was the GM's decision. Turn on the world setting **GM approves companion actions** to confirm every request by hand. No connected GM: player requests are refused. **Repair** (manager or card) fixes a manifested companion whose token was deleted, a dormant one at 0 HP, and adopts a companion token placed by hand.
 
 ## Run the automated tests
 
@@ -106,7 +95,7 @@ npm test
 npm run check
 ```
 
-Tests cover the pure dice algorithm, an isolated Foundry-roll mock, the registered damage hook, critical behavior, independent damage parts, Graze, duplicate hook calls, rollback, companion state/placement geometry, native slot decrement detection, a mocked native spell Activity and token lifecycle, and player-to-GM approval/placement simulation. **These are not tests inside the Foundry application.**
+Tests cover the pure dice algorithm, an isolated Foundry-roll mock, the registered damage hook, critical behavior, independent damage parts, Graze, duplicate hook calls, rollback, companion state/placement geometry, native slot decrement detection, a mocked companion lifecycle (slot / spell / free costs, refunds, adoption, player requests through the GM query), token light presets and the scene switchboard. **These are not tests inside the Foundry application.**
 
 ### Suggested first in-world checklist
 
@@ -173,6 +162,23 @@ The module preserves a token's previous light settings on ignition and normally 
 
 **References:** [2024 D&D equipment rules](https://www.dndbeyond.com/sources/dnd/br-2024/equipment), [D&D 5e v6 Activity hooks](https://github.com/foundryvtt/dnd5e/wiki/Hooks), [Foundry V14 LightData schema](https://foundryvtt.com/api/v14/classes/foundry.data.LightData.html).
 
+## Token lights and scene lights (new in v0.8.0)
+
+The *Player & GM Light Controller* macro as two tabs of the light window (Token controls → *Portable lights*, or right-click a token → light bulb).
+
+**Token lights (everyone):** pick a token you own (hero, vestige, familiar) and a light, choose the look (Gentle, Balanced, Vivid: appearance only, the radius stays), **Apply**. Nothing is spent; for torches and lamps that burn out use *Carried items*. A burning carried item on that token is put out first.
+
+| Light | Bright / total dim | Light | Bright / total dim |
+|---|---|---|---|
+| Candle | 5 / 10 ft | *Light* | 20 / 40 ft |
+| Torch | 20 / 40 ft | *Continual Flame* | 20 / 40 ft |
+| Oil Lamp | 15 / 45 ft | *Produce Flame* | 10 / 20 ft |
+| Hooded Lantern open / shut | 30 / 60 · 0 / 5 ft | *Daylight* | 60 / 120 ft |
+| Bullseye Lantern (60° cone) | 60 / 120 ft | Spectral Aura · Beacon | 0 / 15 · 10 / 30 ft |
+| Moonlit Glow | 5 / 20 ft | No light | — |
+
+**Scene lights (GM):** every ambient light and token light of the scene, with its state. **Turn off** (the original is kept), **Turn on / restore**, **Toggle each**, **Soften the look** (weaker colour and luminosity, same ranges) and **Restore the original look**, for the lights selected on the map, the ticked ones, or all (asks first). Magical darkness and Global Illumination are never changed, and "all" never reveals an ambient light you hid by hand. Lights switched off or softened by the old macro come back too. A player can't relight a token you switched off until you restore it.
+
 ## Blind Death Saves — GM-only 2024 D&D death-save tracking (new in v0.6.0)
 
 When a **character Actor reaches 0 HP and is dying**, Planar Homebrew can automatically make a GM-secret death save at the beginning of each of their combat turns. **A connected, primary GM is required.** If combat automation is not appropriate, the GM can use **Secret roll** manually. Both modes update a GM-restricted journal tally, never the Actor's player-readable death successes/failures. Native death-save rolls are suppressed for covered character Actors and replaced by this workflow.
@@ -198,9 +204,13 @@ When a **character Actor reaches 0 HP and is dying**, Planar Homebrew can automa
 
 ```js
 const api = game.modules.get("planar-homebrew").api;   // also game.planarHomebrew (0.6.0 macros)
-api.open();                                  // GM manager (openManager), api.openLights(), api.openStatus()
+api.open();                                  // GM manager (openManager), api.openStatus()
+api.openLights({tab: "token", tokenId});     // tabs: items | token | scene (GM)
+await api.applyTokenLight(token.document, "aura", {strength: "gentle"});  // api.lightPresets() lists them
+await api.switchLights([...api.sceneLightSources(canvas.scene).values()], "off", {scope: "all"});  // GM
 await api.togglePortableLight(item);         // light or put out an owned light item
 await api.performCompanionAction(actor, "recall");   // manifest | return | recall | dismiss | command | destroy (GM)
+await api.performCompanionAction(actor, "manifest", {slotKey: "pact"});  // skip the slot question
 await api.rollBlindDeathSave(actor, {manual: true});  // GM: one secret death save
 await api.addPrivateDeathFailure(actor, 1);  // GM: a secret failure (1 or 2)
 api.calculateResonance([4, 4], faces => 4);  // the pure dice chain

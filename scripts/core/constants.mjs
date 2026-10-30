@@ -13,14 +13,22 @@ export const DEFAULT_RESONANCE = Object.freeze({
   initialDice: 2,
   maxExtra: 100,
   damageType: 'slashing',
-  criticalMode: 'no-base-doubling'
+  criticalMode: 'no-base-doubling',
+  // 'inline': the chain is added inside the weapon's damage roll (falls back to 'separate' if it can't).
+  // 'separate': the tested macro's way: crit doubling off for this attack, chain rolled as its own damage card.
+  mode: 'inline'
 });
 export const DEFAULT_VESTIGE = Object.freeze({
   companionUuid: '',
   state: 'unbound',
   range: 60,
+  // How Manifest is paid: 'slot' (the module spends one Pact/spell slot the player picks),
+  // 'spell' (cast the chosen spell activity on the sheet) or 'free'. requireCasting is kept for old bindings.
+  costMode: 'slot',
   requireCasting: true,
   lightPreset: 'aura',
+  // On binding, give the hero's players OWNER of the companion actor (so they can move it and use its actions).
+  grantOwnership: true,
   castingActivityId: '',
   castingItemUuid: '',
   requireOutsideCombatRecall: true,
