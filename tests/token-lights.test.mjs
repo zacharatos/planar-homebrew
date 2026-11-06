@@ -109,7 +109,7 @@ test('switchLights preset: ambient and token lights get a preset; switched-off l
   assert.equal(lamp.hidden,true);
   const r=await switchLights(src,'preset',{preset:'beacon',strength:'gentle'});
   assert.deepEqual([r.changed,r.failed.length],[2,0]);
-  assert.deepEqual([lamp.config.bright,lamp.config.dim,lamp.config.color],[10,30,'#8F8BBE']);
+  assert.deepEqual([lamp.config.bright,lamp.config.dim,lamp.config.color],[10,30,'#A79BFF']);
   assert.equal(lamp.config.attenuation,.4,'fields we do not set are kept');
   assert.equal(lamp.hidden,false,'switched off by us → back on with the preset');
   assert.equal(lamp.flags['planar-homebrew'].lightSwitch,undefined);
@@ -124,4 +124,15 @@ test('switchLights preset: ambient and token lights get a preset; switched-off l
   assert.equal(hidden.hidden,true);assert.equal(hidden.config.dim,20);
   await assert.rejects(switchLights(src,'preset',{preset:'off'}),/preset|profile/i);
   await assert.rejects(switchLights(src,'preset',{preset:'nope'}),/preset|profile/i);
+});
+test('flames read as fire: warm colour, real colour intensity, visible flicker; the look scales the flicker too',()=>{
+  const torch=buildTokenLight('torch',{animations:{torch:{}}});
+  assert.equal(torch.color,'#FF9A3C');
+  assert.ok(torch.alpha>=.45,'colour intensity strong enough to tint a dark map');
+  assert.equal(torch.animation.type,'torch');
+  assert.ok(torch.animation.intensity>=5&&torch.animation.speed>=4,'flicker you can see');
+  const gentle=buildTokenLight('torch',{strength:'gentle',animations:{torch:{}}}),vivid=buildTokenLight('torch',{strength:'vivid',animations:{torch:{}}});
+  assert.ok(gentle.animation.intensity<torch.animation.intensity&&vivid.animation.intensity>torch.animation.intensity);
+  assert.ok(gentle.animation.intensity>=1&&vivid.animation.intensity<=10);
+  assert.equal(buildTokenLight('day').animation.intensity,0,'steady lights stay steady');
 });

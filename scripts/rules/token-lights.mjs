@@ -4,7 +4,7 @@
 // still restored.
 import {ID} from '../core/constants.mjs';
 import {t,fail} from '../i18n.mjs';
-import {TOKEN_LIGHT_PRESETS,buildTokenLight,emitsLight,resolveSwitchAction,softenedLook,savedLook,SOFT_FIELDS,isTokenLightPreset,isScenePreset} from '../core/token-lights.mjs';
+import {TOKEN_LIGHT_PRESETS,buildTokenLight,emitsLight,resolveSwitchAction,softenedLook,savedLook,SOFT_FIELDS,isTokenLightPreset,isScenePreset,DEFAULT_STRENGTH} from '../core/token-lights.mjs';
 import {extinguishPortableLight} from './light.mjs';
 
 const SWITCH='lightSwitch', LOOK='lightLook';
@@ -35,7 +35,7 @@ export function lightableTokens(scene=canvas?.scene,user=game.user){
 export const tokenPreset=doc=>safeFlag(doc,ID,'tokenLight')??'';
 
 /** GM: put a light preset on a token. The token's portable item light goes out first. */
-export async function applyTokenLight(doc,key,{strength='gentle'}={}){
+export async function applyTokenLight(doc,key,{strength=DEFAULT_STRENGTH}={}){
   if(!doc)throw fail('Err.SelectToken');
   if(!isTokenLightPreset(key))throw fail('Err.LightPreset');
   // Only the GM puts presets on tokens; players light what their heroes carry (items, light spells).
@@ -83,7 +83,7 @@ export function selectedSourceIds(sources){
  * radii and look, and a light this tool switched off or softened comes back on with it (the saved
  * original is dropped). An ambient light hidden by hand gets the preset but stays hidden.
  */
-export async function switchLights(sources,requested,{scope='manual',preset='',strength='gentle'}={}){
+export async function switchLights(sources,requested,{scope='manual',preset='',strength=DEFAULT_STRENGTH}={}){
   if(!game.user.isGM)throw fail('Err.GMOnly');
   if(requested==='preset'&&!isScenePreset(preset))throw fail('Err.LightPreset');
   let changed=0,skipped=0;const failed=[];

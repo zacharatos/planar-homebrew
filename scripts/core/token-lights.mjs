@@ -1,22 +1,27 @@
 // Token light presets and the scene light switchboard: pure helpers, no Foundry globals.
 // Ported from Timos's tested macros "Player & GM Light Controller" v2/v3 (Foundry 14, dnd5e 6.0.x):
-// same presets, same gentle look, same off/on/toggle/soften/restore rules.
+// same presets and off/on/toggle/soften/restore rules; the look was retuned in 0.10.0.
 
-/** Bright and dim are TOTAL radii in feet. Appearance values are deliberately gentle (v3 macro). */
+/**
+ * Bright and dim are TOTAL radii in feet. The look (colour, colour intensity = alpha, luminosity,
+ * animation) is the "Balanced" one; Gentle and Vivid scale it. Flames are warm and saturated with a
+ * visible flicker so they read as fire on a dark, blue-tinted night map (0.10.0 retune: the v3 macro's
+ * muted colours at alpha .2 and a 2/10 flicker looked like a still white light under Adaptive Luminance).
+ */
 export const TOKEN_LIGHT_PRESETS = Object.freeze({
-  candle:  {bright: 5,  dim: 10,  color: '#A2642A', alpha: .14, luminosity: .20, animation: 'torch', speed: 1, intensity: 1},
-  torch:   {bright: 20, dim: 40,  color: '#B87538', alpha: .20, luminosity: .30, animation: 'torch', speed: 2, intensity: 2},
-  oil:     {bright: 15, dim: 45,  color: '#B78C54', alpha: .16, luminosity: .25},
-  hood:    {bright: 30, dim: 60,  color: '#BBA17B', alpha: .17, luminosity: .30},
-  closed:  {bright: 0,  dim: 5,   color: '#AC875B', alpha: .10, luminosity: .12},
-  bull:    {bright: 60, dim: 120, color: '#B8A68B', alpha: .18, luminosity: .34, angle: 60},
-  light:   {bright: 20, dim: 40,  color: '#ACB9CE', alpha: .16, luminosity: .28},
-  flame:   {bright: 20, dim: 40,  color: '#B67B4F', alpha: .17, luminosity: .27, animation: 'torch', speed: 1, intensity: 1},
-  produce: {bright: 10, dim: 20,  color: '#B66D3E', alpha: .18, luminosity: .25, animation: 'torch', speed: 2, intensity: 1},
-  day:     {bright: 60, dim: 120, color: '#BEBAB0', alpha: .12, luminosity: .45},
-  aura:    {bright: 0,  dim: 15,  color: '#7773AC', alpha: .18, luminosity: .12, animation: 'ghost', speed: 1, intensity: 1},
-  beacon:  {bright: 10, dim: 30,  color: '#8F8BBE', alpha: .22, luminosity: .25, animation: 'ghost', speed: 2, intensity: 1},
-  moon:    {bright: 5,  dim: 20,  color: '#8299B3', alpha: .12, luminosity: .20},
+  candle:  {bright: 5,  dim: 10,  color: '#FFB357', alpha: .40, luminosity: .40, animation: 'torch', speed: 3, intensity: 4},
+  torch:   {bright: 20, dim: 40,  color: '#FF9A3C', alpha: .50, luminosity: .50, animation: 'torch', speed: 4, intensity: 5},
+  oil:     {bright: 15, dim: 45,  color: '#FFBE6B', alpha: .42, luminosity: .45, animation: 'flame', speed: 2, intensity: 3},
+  hood:    {bright: 30, dim: 60,  color: '#FFC878', alpha: .42, luminosity: .45, animation: 'flame', speed: 2, intensity: 3},
+  closed:  {bright: 0,  dim: 5,   color: '#E89A4A', alpha: .30, luminosity: .20, animation: 'flame', speed: 2, intensity: 2},
+  bull:    {bright: 60, dim: 120, color: '#FFD08A', alpha: .40, luminosity: .50, animation: 'flame', speed: 1, intensity: 2, angle: 60},
+  light:   {bright: 20, dim: 40,  color: '#F6F0D8', alpha: .25, luminosity: .45},
+  flame:   {bright: 20, dim: 40,  color: '#FFA94D', alpha: .45, luminosity: .45, animation: 'torch', speed: 2, intensity: 3},
+  produce: {bright: 10, dim: 20,  color: '#FF8A2A', alpha: .55, luminosity: .45, animation: 'torch', speed: 4, intensity: 5},
+  day:     {bright: 60, dim: 120, color: '#FFF6DC', alpha: .20, luminosity: .60},
+  aura:    {bright: 0,  dim: 15,  color: '#8E7CFF', alpha: .45, luminosity: .25, animation: 'ghost', speed: 2, intensity: 3},
+  beacon:  {bright: 10, dim: 30,  color: '#A79BFF', alpha: .50, luminosity: .35, animation: 'ghost', speed: 3, intensity: 4},
+  moon:    {bright: 5,  dim: 20,  color: '#9DBBE6', alpha: .35, luminosity: .30},
   off:     {bright: 0,  dim: 0,   color: null,      alpha: 0,   luminosity: 0}
 });
 
@@ -28,8 +33,9 @@ export const TOKEN_LIGHT_GROUPS = Object.freeze({
   none: ['off']
 });
 
-/** Visual intensity: changes appearance only, never the radii. */
-export const LIGHT_STRENGTHS = Object.freeze({gentle: 1, balanced: 1.3, vivid: 1.7});
+/** Look: scales colour intensity, luminosity and flicker strength, never the radii. Balanced = the preset as written. */
+export const LIGHT_STRENGTHS = Object.freeze({gentle: .7, balanced: 1, vivid: 1.3});
+export const DEFAULT_STRENGTH = 'balanced';
 
 /** The appearance fields that "soften" changes and "restore look" puts back. */
 export const SOFT_FIELDS = Object.freeze(['alpha', 'luminosity', 'coloration', 'saturation', 'contrast', 'shadows']);
@@ -55,7 +61,7 @@ export const isTokenLightPreset = key => Object.hasOwn(TOKEN_LIGHT_PRESETS, key)
  * module doesn't set are kept). `animations` is CONFIG.Canvas.lightAnimations: an animation Foundry
  * doesn't know is dropped instead of failing.
  */
-export function buildTokenLight(key, {strength = 'gentle', units = 'ft', current = {}, animations = null} = {}) {
+export function buildTokenLight(key, {strength = DEFAULT_STRENGTH, units = 'ft', current = {}, animations = null} = {}) {
   const p = TOKEN_LIGHT_PRESETS[key];
   if (!p) return null;
   const s = LIGHT_STRENGTHS[strength] ?? (Number.isFinite(Number(strength)) ? Number(strength) : 1);
@@ -71,7 +77,7 @@ export function buildTokenLight(key, {strength = 'gentle', units = 'ft', current
     coloration: 1, saturation: 0, contrast: 0, shadows: 0,
     negative: false,
     darkness: {min: 0, max: 1},
-    animation: {type: anim, speed: p.speed ?? 0, intensity: p.intensity ?? 0, reverse: false}
+    animation: {type: anim, speed: p.speed ?? 0, intensity: p.intensity ? clamp(Math.round(p.intensity * s), 1, 10) : 0, reverse: false}
   };
 }
 

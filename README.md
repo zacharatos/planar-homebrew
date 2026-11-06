@@ -168,7 +168,7 @@ The module preserves a token's previous light settings on ignition and normally 
 
 The *Player & GM Light Controller* macro as two GM tabs of the light window (*Portable lights*, *Scene lights*, or right-click a token → light bulb). Players don't see them: they light only what their heroes carry, with the profile the GM gave each item or spell.
 
-**Token lights:** pick any token (hero, vestige, familiar) and a light, choose the look (Gentle, Balanced, Vivid: appearance only, the radius stays), **Apply**. Nothing is spent; for torches and lamps that burn out use *Carried items*. A burning carried item on that token is put out first.
+**Token lights:** pick any token (hero, vestige, familiar) and a light, choose the look (Gentle, Balanced, Vivid: colour strength, brightness and flicker; the radius stays), **Apply**. Nothing is spent; for torches and lamps that burn out use *Carried items*. A burning carried item on that token is put out first.
 
 | Light | Bright / total dim | Light | Bright / total dim |
 |---|---|---|---|

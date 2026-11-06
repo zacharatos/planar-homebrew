@@ -597,8 +597,8 @@
         "off": "No light"
       },
       "StrengthLevel": {
-        "gentle": "Gentle (recommended)",
-        "balanced": "Balanced",
+        "gentle": "Gentle",
+        "balanced": "Balanced (recommended)",
         "vivid": "Vivid"
       },
       "SwitchAction": {

@@ -597,8 +597,8 @@
         "off": "Χωρίς φως"
       },
       "StrengthLevel": {
-        "gentle": "Απαλό (προτείνεται)",
-        "balanced": "Μέτριο",
+        "gentle": "Απαλό",
+        "balanced": "Μέτριο (προτείνεται)",
         "vivid": "Έντονο"
       },
       "SwitchAction": {

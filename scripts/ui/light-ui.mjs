@@ -116,7 +116,7 @@ export class PlanarLightController extends foundry.applications.api.ApplicationV
   static DEFAULT_OPTIONS={id:'planar-homebrew-light-controller',window:{title:'PLANAR_HOMEBREW.Light.ControllerTitle',resizable:true},position:{width:780,height:600}};
   tab='items';
   /** Remembered choices, so a redraw (another user's change) doesn't lose what the user picked. */
-  choice={tokenId:'',preset:'torch',strength:'gentle',action:'off',scope:'',checked:null};
+  choice={tokenId:'',preset:'torch',strength:'balanced',action:'off',scope:'',checked:null};
   get title(){return t('Light.ControllerTitle');}
   /** Open on a tab and/or with a token picked (Token HUD button). */
   configure({tab,tokenId}={}){

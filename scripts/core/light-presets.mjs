@@ -1,19 +1,19 @@
 import {fail} from '../i18n.mjs';
 /** Scene-unit-independent radii are stored in feet; Foundry token light uses scene distance units. */
 export const LIGHT_PRESETS = Object.freeze({
-  candle: {label:'Candle',bright:5,dim:10,color:'#A2642A',alpha:.14,luminosity:.20,animation:'torch',speed:2,intensity:1,angle:360,maxIgnitions:5,burnSeconds:3600,fuelMode:'replace'},
-  torch: {label:'Torch',bright:20,dim:40,color:'#FF9922',alpha:.24,luminosity:.32,animation:'torch',speed:3,intensity:2,angle:360,maxIgnitions:5,burnSeconds:3600,fuelMode:'replace'},
-  lamp: {label:'Oil Lamp',bright:15,dim:45,color:'#FFCC77',alpha:.18,luminosity:.27,animation:'flame',speed:2,intensity:1,angle:360,maxIgnitions:10,burnSeconds:21600,fuelMode:'oil'},
-  hooded: {label:'Hooded Lantern',bright:30,dim:60,color:'#FFD27A',alpha:.18,luminosity:.29,animation:'flame',speed:1,intensity:1,angle:360,maxIgnitions:10,burnSeconds:21600,fuelMode:'oil'},
-  bullseye: {label:'Bullseye Lantern',bright:60,dim:120,color:'#FFD27A',alpha:.20,luminosity:.33,animation:'flame',speed:1,intensity:1,angle:60,maxIgnitions:10,burnSeconds:21600,fuelMode:'oil'},
-  magic: {label:'Magic Light (permanent)',bright:20,dim:40,color:'#FFF4CC',alpha:.17,luminosity:.30,animation:'none',speed:1,intensity:1,angle:360,maxIgnitions:0,burnSeconds:0,fuelMode:'none'},
-  light: {label:'Light Cantrip',bright:20,dim:40,color:'#FFF4CC',alpha:.17,luminosity:.30,animation:'none',speed:1,intensity:1,angle:360,maxIgnitions:0,burnSeconds:0,fuelMode:'none'},
-  continual: {label:'Continual Flame',bright:20,dim:40,color:'#FFCC77',alpha:.18,luminosity:.26,animation:'flame',speed:1,intensity:1,angle:360,maxIgnitions:0,burnSeconds:0,fuelMode:'none'},
-  produce: {label:'Produce Flame',bright:10,dim:20,color:'#FF9922',alpha:.18,luminosity:.25,animation:'torch',speed:2,intensity:1,angle:360,maxIgnitions:0,burnSeconds:0,fuelMode:'none'},
-  daylight: {label:'Daylight Spell',bright:60,dim:120,color:'#FFFFEE',alpha:.12,luminosity:.4,animation:'none',speed:1,intensity:1,angle:360,maxIgnitions:0,burnSeconds:0,fuelMode:'none'},
-  beacon: {label:'Spectral Beacon',bright:10,dim:30,color:'#8F8BBE',alpha:.16,luminosity:.24,animation:'ghost',speed:1,intensity:1,angle:360,maxIgnitions:0,burnSeconds:0,fuelMode:'none'},
-  spectral: {label:'Spectral Aura',bright:0,dim:15,color:'#7773AC',alpha:.14,luminosity:.19,animation:'ghost',speed:1,intensity:1,angle:360,maxIgnitions:0,burnSeconds:0,fuelMode:'none'},
-  moon: {label:'Moonlit Glow',bright:5,dim:20,color:'#8299B3',alpha:.12,luminosity:.20,animation:'none',speed:1,intensity:1,angle:360,maxIgnitions:0,burnSeconds:0,fuelMode:'none'}
+  candle: {label:'Candle',bright:5,dim:10,color:'#FFB357',alpha:.40,luminosity:.40,animation:'torch',speed:3,intensity:4,angle:360,maxIgnitions:5,burnSeconds:3600,fuelMode:'replace'},
+  torch: {label:'Torch',bright:20,dim:40,color:'#FF9A3C',alpha:.50,luminosity:.50,animation:'torch',speed:4,intensity:5,angle:360,maxIgnitions:5,burnSeconds:3600,fuelMode:'replace'},
+  lamp: {label:'Oil Lamp',bright:15,dim:45,color:'#FFBE6B',alpha:.42,luminosity:.45,animation:'flame',speed:2,intensity:3,angle:360,maxIgnitions:10,burnSeconds:21600,fuelMode:'oil'},
+  hooded: {label:'Hooded Lantern',bright:30,dim:60,color:'#FFC878',alpha:.42,luminosity:.45,animation:'flame',speed:2,intensity:3,angle:360,maxIgnitions:10,burnSeconds:21600,fuelMode:'oil'},
+  bullseye: {label:'Bullseye Lantern',bright:60,dim:120,color:'#FFD08A',alpha:.40,luminosity:.50,animation:'flame',speed:1,intensity:2,angle:60,maxIgnitions:10,burnSeconds:21600,fuelMode:'oil'},
+  magic: {label:'Magic Light (permanent)',bright:20,dim:40,color:'#F6F0D8',alpha:.25,luminosity:.45,animation:'none',speed:1,intensity:1,angle:360,maxIgnitions:0,burnSeconds:0,fuelMode:'none'},
+  light: {label:'Light Cantrip',bright:20,dim:40,color:'#F6F0D8',alpha:.25,luminosity:.45,animation:'none',speed:1,intensity:1,angle:360,maxIgnitions:0,burnSeconds:0,fuelMode:'none'},
+  continual: {label:'Continual Flame',bright:20,dim:40,color:'#FFA94D',alpha:.45,luminosity:.45,animation:'torch',speed:2,intensity:3,angle:360,maxIgnitions:0,burnSeconds:0,fuelMode:'none'},
+  produce: {label:'Produce Flame',bright:10,dim:20,color:'#FF8A2A',alpha:.55,luminosity:.45,animation:'torch',speed:4,intensity:5,angle:360,maxIgnitions:0,burnSeconds:0,fuelMode:'none'},
+  daylight: {label:'Daylight Spell',bright:60,dim:120,color:'#FFF6DC',alpha:.20,luminosity:.60,animation:'none',speed:1,intensity:1,angle:360,maxIgnitions:0,burnSeconds:0,fuelMode:'none'},
+  beacon: {label:'Spectral Beacon',bright:10,dim:30,color:'#A79BFF',alpha:.50,luminosity:.35,animation:'ghost',speed:3,intensity:4,angle:360,maxIgnitions:0,burnSeconds:0,fuelMode:'none'},
+  spectral: {label:'Spectral Aura',bright:0,dim:15,color:'#8E7CFF',alpha:.45,luminosity:.25,animation:'ghost',speed:2,intensity:3,angle:360,maxIgnitions:0,burnSeconds:0,fuelMode:'none'},
+  moon: {label:'Moonlit Glow',bright:5,dim:20,color:'#9DBBE6',alpha:.35,luminosity:.30,animation:'none',speed:1,intensity:1,angle:360,maxIgnitions:0,burnSeconds:0,fuelMode:'none'}
 });
 /** Spells recognised by name (2024 PHB): casting them lights the caster's token. */
 export function classifySpellLight(name='') {
