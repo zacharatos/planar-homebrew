@@ -4,7 +4,7 @@
 // still restored.
 import {ID} from '../core/constants.mjs';
 import {t,fail} from '../i18n.mjs';
-import {TOKEN_LIGHT_PRESETS,buildTokenLight,emitsLight,resolveSwitchAction,softenedLook,savedLook,SOFT_FIELDS,isTokenLightPreset} from '../core/token-lights.mjs';
+import {TOKEN_LIGHT_PRESETS,buildTokenLight,emitsLight,resolveSwitchAction,softenedLook,savedLook,SOFT_FIELDS,isTokenLightPreset,isScenePreset} from '../core/token-lights.mjs';
 import {extinguishPortableLight} from './light.mjs';
 
 const SWITCH='lightSwitch', LOOK='lightLook';
@@ -77,9 +77,15 @@ export function selectedSourceIds(sources){
   return ids;
 }
 
-/** GM: switch, soften or restore a set of sources. Returns {changed, skipped, failed[]}. */
-export async function switchLights(sources,requested,{scope='manual'}={}){
+/**
+ * GM: switch, soften, restore or give a preset to a set of sources. Returns {changed, skipped, failed[]}.
+ * 'preset' (with {preset, strength}) works on ambient and token lights alike: the light gets the preset's
+ * radii and look, and a light this tool switched off or softened comes back on with it (the saved
+ * original is dropped). An ambient light hidden by hand gets the preset but stays hidden.
+ */
+export async function switchLights(sources,requested,{scope='manual',preset='',strength='gentle'}={}){
   if(!game.user.isGM)throw fail('Err.GMOnly');
+  if(requested==='preset'&&!isScenePreset(preset))throw fail('Err.LightPreset');
   let changed=0,skipped=0;const failed=[];
   for(const source of sources){
     const {doc,kind,label}=source;
@@ -88,6 +94,17 @@ export async function switchLights(sources,requested,{scope='manual'}={}){
       const action=resolveSwitchAction(requested,{lit,saved:Boolean(backup)});
       const path=kind==='ambient'?'config':'light';
       const model=kind==='ambient'?doc.config:doc.light;
+      if(action==='preset'){
+        if(kind==='token')await applyTokenLight(doc,preset,{strength});
+        else{
+          const config=buildTokenLight(preset,{strength,units:doc.parent?.grid?.units??'ft',current:clone(doc.config),animations:CONFIG.Canvas?.lightAnimations});
+          const update={config,[`flags.${ID}.tokenLight`]:preset};
+          if(backup?.kind==='ambient')update.hidden=Boolean(backup.hidden);
+          await doc.update(update);
+        }
+        await clearSwitch(doc);await clearLook(doc);
+        changed++;continue;
+      }
       if(action==='soften'){
         if(!lit||backup||lookBackup(doc)){skipped++;continue;}
         const look=softenedLook(model);

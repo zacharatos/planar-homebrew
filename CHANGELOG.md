@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.10.0] — 2026-11-06
+
+- **Scene lights: Give a light preset.** New switchboard action: the token light presets (Torch, Spectral Aura, Moonlit Glow…, with a Gentle / Balanced / Vivid look) can now go on **ambient lights** too, and on several lights at once (selected on the map, ticked, or all). A light the tool switched off comes back on with the preset; one softened gets the preset's look; an ambient light hidden by hand gets the preset but stays hidden. The list shows each light's preset. API: `switchLights(sources, 'preset', {preset, strength})`. Ambient lights now carry the `tokenLight` flag as well; no migration needed.
+
 ## [0.9.0] — 2026-10-30
 
 From the 0.8.0 test at the table.

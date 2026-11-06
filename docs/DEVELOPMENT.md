@@ -16,7 +16,7 @@ scripts/core/                 pure rule logic, no Foundry globals (unit-tested)
   state.mjs                   companion state machine
   death-math.mjs              2024 death save math, formula, natural d20
   light-presets.mjs           light profiles, item-name recognition, fuel and burn-time math, token light data
-  token-lights.mjs            token light presets (from the v3 light macro), switchboard rules (toggle, soften)
+  token-lights.mjs            token light presets (from the v3 light macro), switchboard rules (toggle, soften, preset)
 scripts/rules/                Foundry-side rule code
   resonance.mjs               dnd5e damage hooks: chain inside the evaluated DamageRoll, or a separate exploding-die card (macro way)
   vestige.mjs                 Bound Companion lifecycle, paying for Manifest, GM query (CONFIG.queries), adoption, combat sync
@@ -80,7 +80,7 @@ When you add a feature: pure logic in `scripts/core/` with a test, Foundry code 
 - [ ] Manager → Lights: Set up a light, Profile every recognised light, Edit (give Lothrik's torch the Spectral Aura profile; lighting it shows violet), Reset, Repair, Remove all work. Refill oil on a lamp with no oil set up uses the actor's *Oil*.
 - [ ] GM *Token lights* tab: pick the vestige's token, Spectral Aura → violet ghost light; Torch on the hero; Vivid looks stronger, same radius; *Turn off*. Right-click a token → light bulb opens the tab with that token picked.
 - [ ] A lit carried torch, then a Token light preset on the same token: the torch is put out first (its ignitions untouched).
-- [ ] *Scene lights* tab (GM): turn off the selected lights; restore; toggle; soften and restore look; "all" asks first and doesn't reveal hand-hidden ambient lights. A light switched off by the old macro comes back with *Turn on / restore*.
+- [ ] *Scene lights* tab (GM): turn off the selected lights; restore; toggle; soften and restore look; "all" asks first and doesn't reveal hand-hidden ambient lights. *Give a light preset*: the preset and look menus appear; ambient lights selected on the map take the preset (radius, colour, animation); a light switched off by the tool comes back on with it; a hand-hidden ambient light stays hidden. A light switched off by the old macro comes back with *Turn on / restore*.
 
 **Blind Death Saves**
 - [ ] Drop a hero to 0 HP in combat: on their turn a blind roll is whispered to the GM only; the player's sheet shows no successes/failures; the sheet's death save button does nothing (GM gets a hint).

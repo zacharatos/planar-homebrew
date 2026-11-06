@@ -606,7 +606,8 @@
         "on": "Turn on / restore",
         "toggle": "Toggle each",
         "soften": "Soften the look (reversible)",
-        "lookrestore": "Restore the original look"
+        "lookrestore": "Restore the original look",
+        "preset": "Give a light preset"
       },
       "Scope": {
         "selected": "Selected on the map ({count})",
@@ -639,7 +640,7 @@
       "CheckNone": "Clear ticks",
       "NoSources": "No light sources on this scene.",
       "ApplyScene": "Apply to lights",
-      "SceneNotes": "Turn on / restore only brings back lights this tool switched off (also those switched off by the old macro). A hidden ambient light comes on only when picked by hand, never with \"every light\".",
+      "SceneNotes": "Turn on / restore only brings back lights this tool switched off (also those switched off by the old macro). A hidden ambient light comes on only when picked by hand, never with \"every light\". Give a light preset works on ambient lights too, and brings back a light this tool switched off; an ambient light hidden by hand gets the preset but stays hidden.",
       "ConfirmAll": "{action}: up to {count} lights on {scene}?",
       "Failed": "Failed: {names}",
       "Result": "Lights: {changed} changed, {skipped} skipped, {failed} failed",

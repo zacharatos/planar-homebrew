@@ -1,7 +1,7 @@
 import {ID} from '../core/constants.mjs';
 import {LIGHT_PRESETS,classifyLightSource} from '../core/light-presets.mjs';
 import {t,fail,language,toggleLanguage} from '../i18n.mjs';
-import {TOKEN_LIGHT_GROUPS,LIGHT_STRENGTHS,pickTargets} from '../core/token-lights.mjs';
+import {TOKEN_LIGHT_GROUPS,LIGHT_STRENGTHS,SWITCH_ACTIONS,pickTargets} from '../core/token-lights.mjs';
 import {lightableTokens,applyTokenLight,tokenPreset,sceneLightSources,sourceLit,selectedSourceIds,switchBackup,lookBackup,switchLights} from '../rules/token-lights.mjs';
 import {assignPortableLight,removePortableLight,getLightAssignment,togglePortableLight,refuelPortableLight,repairPortableLight,resetPortableLight,setHood,summarizeLight} from '../rules/light.mjs';
 
@@ -103,8 +103,9 @@ export async function handleLightManagerAction(action,uuid,refresh){
 }
 const TABS=['items','token','scene'];
 /** The preset menu, grouped: mundane lights, spells, vestige lights, none. */
-export function tokenPresetOptions(selected=''){
-  return Object.entries(TOKEN_LIGHT_GROUPS).map(([group,keys])=>`<optgroup label="${safe(t(`TokenLight.Group.${group}`))}">${keys.map(k=>option(k,t(`TokenLight.Preset.${k}`),k===selected)).join('')}</optgroup>`).join('');
+export function tokenPresetOptions(selected='',{withOff=true}={}){
+  return Object.entries(TOKEN_LIGHT_GROUPS).map(([group,keys])=>[group,keys.filter(k=>withOff||k!=='off')]).filter(([,keys])=>keys.length)
+    .map(([group,keys])=>`<optgroup label="${safe(t(`TokenLight.Group.${group}`))}">${keys.map(k=>option(k,t(`TokenLight.Preset.${k}`),k===selected)).join('')}</optgroup>`).join('');
 }
 /**
  * Lights window, for everyone: carried items (torches, lamps…), token lights (any owned token, including a
@@ -190,11 +191,16 @@ export class PlanarLightController extends foundry.applications.api.ApplicationV
     const scope=this.choice.scope||(selected.size?'selected':'manual');
     const rows=[...sources.values()].map(s=>{
       const state=switchBackup(s.doc)?t('TokenLight.OffSaved'):t(sourceLit(s)?'TokenLight.On':'TokenLight.Off');
-      return `<label class="planar-source"><input type="checkbox" name="sourceIds" value="${safe(s.id)}" ${checked.has(s.id)?'checked':''}><span>${safe(s.label)}</span><small>${safe(state)}${lookBackup(s.doc)?' · '+safe(t('TokenLight.Softened')):''}</small></label>`;
+      const preset=tokenPreset(s.doc);
+      return `<label class="planar-source"><input type="checkbox" name="sourceIds" value="${safe(s.id)}" ${checked.has(s.id)?'checked':''}><span>${safe(s.label)}</span><small>${safe(state)}${preset&&preset!=='off'?' · '+safe(t(`TokenLight.Preset.${preset}`)):''}${lookBackup(s.doc)?' · '+safe(t('TokenLight.Softened')):''}</small></label>`;
     }).join('');
     return `<p>${t('TokenLight.SceneIntro',{scene:safe(scene.name)})}</p>
       <div class="planar-form">
-        ${field(t('TokenLight.Action'),`<select name="action">${['off','on','toggle','soften','lookrestore'].map(k=>option(k,t(`TokenLight.SwitchAction.${k}`),k===this.choice.action)).join('')}</select>`)}
+        ${field(t('TokenLight.Action'),`<select name="action">${SWITCH_ACTIONS.map(k=>option(k,t(`TokenLight.SwitchAction.${k}`),k===this.choice.action)).join('')}</select>`)}
+        <div class="planar-scene-preset" ${this.choice.action==='preset'?'':'hidden'}>
+          ${field(t('TokenLight.Source'),`<select name="preset">${tokenPresetOptions(this.choice.preset,{withOff:false})}</select>`)}
+          ${field(t('TokenLight.Strength'),`<select name="strength">${Object.keys(LIGHT_STRENGTHS).map(k=>option(k,t(`TokenLight.StrengthLevel.${k}`),k===this.choice.strength)).join('')}</select>`)}
+        </div>
         ${field(t('TokenLight.Targets'),`<select name="scope">${option('selected',t('TokenLight.Scope.selected',{count:selected.size}),scope==='selected')}${option('manual',t('TokenLight.Scope.manual'),scope==='manual')}${option('all',t('TokenLight.Scope.all'),scope==='all')}</select>`)}
       </div>
       <div class="planar-buttons"><button type="button" data-check="all">${safe(t('TokenLight.CheckAll'))}</button><button type="button" data-check="none">${safe(t('TokenLight.CheckNone'))}</button></div>
@@ -221,6 +227,10 @@ export class PlanarLightController extends foundry.applications.api.ApplicationV
     root.querySelector('[data-planar-lang]')?.addEventListener('click',()=>void toggleLanguage());
     root.querySelectorAll('[data-planar-tab]').forEach(el=>el.addEventListener('click',()=>{this._remember();this.tab=el.dataset.planarTab;this.render();}));
     root.querySelectorAll('select,input').forEach(el=>el.addEventListener('change',()=>this._remember()));
+    // Scene tab: the preset and look menus show only for "Give a light preset".
+    root.querySelector('.planar-lights [name="action"]')?.addEventListener('change',ev=>{
+      const box=root.querySelector('.planar-scene-preset');if(box)box.hidden=ev.currentTarget.value!=='preset';
+    });
     // Items tab
     root.querySelectorAll('[data-light-action]').forEach(el=>el.addEventListener('click',()=>this._run(el,async()=>{
       const item=await fromUuid(el.dataset.lightUuid);
@@ -256,7 +266,7 @@ export class PlanarLightController extends foundry.applications.api.ApplicationV
       const ids=pickTargets(this.choice.scope,{all:[...sources.keys()],selected:selectedSourceIds(sources),checked:this.choice.checked??[]});
       if(!ids.length)throw fail('Err.NoLightsPicked');
       if(this.choice.scope==='all'&&!await confirm(t('TokenLight.ConfirmAll',{action:t(`TokenLight.SwitchAction.${this.choice.action}`),count:ids.length,scene:canvas.scene.name})))return '';
-      const {changed,skipped,failed}=await switchLights(ids.map(id=>sources.get(id)),this.choice.action,{scope:this.choice.scope});
+      const {changed,skipped,failed}=await switchLights(ids.map(id=>sources.get(id)),this.choice.action,{scope:this.choice.scope,preset:this.choice.preset,strength:this.choice.strength});
       this.choice.checked=null;
       if(failed.length)ui.notifications.error(t('TokenLight.Failed',{names:failed.slice(0,4).join(', ')}));
       return t('TokenLight.Result',{changed,skipped,failed:failed.length});

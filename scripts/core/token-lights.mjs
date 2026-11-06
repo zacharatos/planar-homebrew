@@ -35,7 +35,10 @@ export const LIGHT_STRENGTHS = Object.freeze({gentle: 1, balanced: 1.3, vivid: 1
 export const SOFT_FIELDS = Object.freeze(['alpha', 'luminosity', 'coloration', 'saturation', 'contrast', 'shadows']);
 
 /** The switchboard's actions. */
-export const SWITCH_ACTIONS = Object.freeze(['off', 'on', 'toggle', 'soften', 'lookrestore']);
+export const SWITCH_ACTIONS = Object.freeze(['off', 'on', 'toggle', 'soften', 'lookrestore', 'preset']);
+
+/** Presets the scene switchboard can give ("no light" is the switchboard's own Turn off). */
+export const isScenePreset = key => isTokenLightPreset(key) && key !== 'off';
 
 export const clamp = (x, min, max) => Math.min(max, Math.max(min, Number(x) || 0));
 
