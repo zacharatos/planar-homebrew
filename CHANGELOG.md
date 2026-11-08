@@ -1,8 +1,11 @@
 # Changelog
 
-## [0.10.0] — 2026-11-06
+## [0.10.1] — 2026-11-06
 
 - **Light presets retuned: flames look like fire.** Torches, candles, lamps, lanterns, *Continual Flame* and *Produce Flame* have a warm amber colour at about twice the colour intensity and a flicker you can see (a torch: `#FF9A3C`, colour intensity .5, Flickering 4/5 instead of a muted `#B87538` at .2 with 2/2, which read as a still white light on a dark night map). The spectral lights are a clearer violet, *Light* and *Daylight* a warmer white. This applies to token presets, scene presets and the carried-item profiles. The look now also scales the flicker; **Balanced** is the preset as written and the new default (Gentle is softer, Vivid stronger). Lights and items set up before keep their saved values: give them the preset again (items: *Remove*, then *Profile every recognised light*).
+
+## [0.10.0] — 2026-11-06
+
 - **Scene lights: Give a light preset.** New switchboard action: the token light presets (Torch, Spectral Aura, Moonlit Glow…, with a Gentle / Balanced / Vivid look) can now go on **ambient lights** too, and on several lights at once (selected on the map, ticked, or all). A light the tool switched off comes back on with the preset; one softened gets the preset's look; an ambient light hidden by hand gets the preset but stays hidden. The list shows each light's preset. API: `switchLights(sources, 'preset', {preset, strength})`. Ambient lights now carry the `tokenLight` flag as well; no migration needed.
 
 ## [0.9.0] — 2026-10-30

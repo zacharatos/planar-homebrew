@@ -1,6 +1,6 @@
 {
   "name": "planar-homebrew",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "private": true,
   "description": "Development tooling for the Planar Homebrew Foundry VTT module (the module itself has no dependencies).",
   "type": "module",
